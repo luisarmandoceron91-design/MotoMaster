@@ -53,4 +53,13 @@ void main() {
     );
     expect(result.map((workshop) => workshop.id), ['jose']);
   });
+
+  test('acepta el municipio escrito manualmente sin distinguir tildes', () {
+    final result = filterWorkshopsForClientSearch(
+      workshops: workshops,
+      department: 'Cauca',
+      municipality: 'popa',
+    );
+    expect(result.map((workshop) => workshop.id), ['jose']);
+  });
 }

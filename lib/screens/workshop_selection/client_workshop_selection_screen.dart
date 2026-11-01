@@ -354,8 +354,10 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
                             controller: _municipalitySearch,
                             textInputAction: TextInputAction.search,
                             decoration: InputDecoration(
-                              labelText: 'Municipio o ciudad',
-                              hintText: 'Escribe para buscar',
+                              labelText: 'Municipio (escríbelo manualmente)',
+                              hintText: 'Ej.: Pasto, Popayán o La Cruz',
+                              helperText:
+                                  'Escribe el municipio; no necesitas seleccionarlo de una lista.',
                               prefixIcon: const Icon(
                                 Icons.location_city_outlined,
                               ),
