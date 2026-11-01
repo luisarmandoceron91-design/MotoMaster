@@ -125674,7 +125674,7 @@ if(r.a.n(0,a.a))return!1
 s=r.b
 if(s.length!==0&&A.Te(a.z)!==s)return!1
 s=r.c
-if(s.length!==0&&!B.m.n(A.Te(a.Q),s))return!1
+if(s.length!==0&&A.Te(a.Q)!==s)return!1
 if(r.d.length===0)return!0
 return r.e.eK(0,B.m.gmh(A.Te(B.l.c3(A.b([a.b,a.z,a.Q,a.as,a.at],t.s)," "))))},
 $S:54}
@@ -135787,7 +135787,7 @@ else if(i.length===0){m=B.m.N(m.a.a)
 if(m.length===0)m="No encontramos talleres con esos filtros."
 else{l=p.x
 if(l==null)l=""
-l="No encontramos talleres disponibles en "+m+", "+l+"."
+l="No se encontraron talleres registrados en "+m+", "+l+"."
 m=l}n.push(new A.qf(m,p.ga15(),!1,o))}else if(r.length===0)n.push(B.bE5)
 else n.push(p.a9L(r))
 return A.a2(n,B.O,o,B.t,B.w,0,B.C)},

@@ -24,7 +24,10 @@ List<Workshop> filterWorkshopsForClientSearch({
         _normalize(workshop.department) != selectedDepartment) {
       return false;
     }
-    if (city.isNotEmpty && !_normalize(workshop.municipality).contains(city)) {
+    // A location filter is an exact municipality search. This prevents a
+    // client who chose La Cruz, Nariño from seeing a workshop registered in
+    // another municipality just because both names contain a similar word.
+    if (city.isNotEmpty && _normalize(workshop.municipality) != city) {
       return false;
     }
     if (normalizedQuery.isEmpty) return true;

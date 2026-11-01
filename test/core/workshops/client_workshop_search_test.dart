@@ -24,6 +24,24 @@ void main() {
       department: 'Nariño',
       municipality: 'La Cruz',
     ),
+    const Workshop(
+      id: 'cruz-2',
+      name: 'Repuestos La Cruz',
+      slug: 'repuestos-la-cruz',
+      tagline: '',
+      accentColorValue: 0xFFFF6500,
+      department: 'Nariño',
+      municipality: 'La Cruz',
+    ),
+    const Workshop(
+      id: 'bernardo',
+      name: 'Motos San Bernardo',
+      slug: 'motos-san-bernardo',
+      tagline: '',
+      accentColorValue: 0xFFFF6500,
+      department: 'Nariño',
+      municipality: 'San Bernardo',
+    ),
   ];
 
   test('no publica todos los talleres antes de elegir ubicación', () {
@@ -54,13 +72,31 @@ void main() {
     expect(result.map((workshop) => workshop.id), ['jose']);
   });
 
-  test('acepta el municipio escrito manualmente sin distinguir tildes', () {
+  test('encuentra todos los talleres del municipio escrito manualmente', () {
     final result = filterWorkshopsForClientSearch(
       workshops: workshops,
-      department: 'Cauca',
-      municipality: 'popa',
+      department: 'Nariño',
+      municipality: 'la cruz',
     );
-    expect(result.map((workshop) => workshop.id), ['jose']);
+    expect(result.map((workshop) => workshop.id), ['elite', 'cruz-2']);
+  });
+
+  test('no mezcla talleres de otro municipio del mismo departamento', () {
+    final result = filterWorkshopsForClientSearch(
+      workshops: workshops,
+      department: 'Nariño',
+      municipality: 'La Cruz',
+    );
+    expect(result.map((workshop) => workshop.id), isNot(contains('bernardo')));
+  });
+
+  test('no devuelve resultados cuando no hay talleres en la ubicación', () {
+    final result = filterWorkshopsForClientSearch(
+      workshops: workshops,
+      department: 'Caquetá',
+      municipality: 'El Doncello',
+    );
+    expect(result, isEmpty);
   });
 
   test('encuentra un taller al buscar por nombre sin filtros de ubicación', () {

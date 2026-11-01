@@ -487,7 +487,7 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
           _StatePanel.empty(
             _municipalitySearch.text.trim().isEmpty
                 ? 'No encontramos talleres con esos filtros.'
-                : 'No encontramos talleres disponibles en ${_municipalitySearch.text.trim()}, ${_department ?? ''}.',
+                : 'No se encontraron talleres registrados en ${_municipalitySearch.text.trim()}, ${_department ?? ''}.',
             onAction: _clearFilters,
           )
         else if (registered.isEmpty)
