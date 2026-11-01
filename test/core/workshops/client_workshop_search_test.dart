@@ -62,4 +62,14 @@ void main() {
     );
     expect(result.map((workshop) => workshop.id), ['jose']);
   });
+
+  test('encuentra un taller al buscar por nombre sin filtros de ubicación', () {
+    final result = filterWorkshopsForClientSearch(
+      workshops: workshops,
+      department: null,
+      municipality: '',
+      query: 'elite',
+    );
+    expect(result.map((workshop) => workshop.id), ['elite']);
+  });
 }

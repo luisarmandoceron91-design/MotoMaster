@@ -8,15 +8,22 @@ List<Workshop> filterWorkshopsForClientSearch({
   Iterable<String> hiddenIds = const [],
 }) {
   final city = _normalize(municipality);
-  if (department == null || department.trim().isEmpty || city.isEmpty) {
+  final selectedDepartment = _normalize(department ?? '');
+  final normalizedQuery = _normalize(query);
+  final hasLocationSearch = selectedDepartment.isNotEmpty && city.isNotEmpty;
+  if (!hasLocationSearch && normalizedQuery.isEmpty) {
     return const [];
   }
   final hidden = hiddenIds.toSet();
-  final normalizedQuery = _normalize(query);
   return workshops.where((workshop) {
     if (hidden.contains(workshop.id)) return false;
-    if (_normalize(workshop.department) != _normalize(department)) return false;
-    if (!_normalize(workshop.municipality).contains(city)) return false;
+    if (selectedDepartment.isNotEmpty &&
+        _normalize(workshop.department) != selectedDepartment) {
+      return false;
+    }
+    if (city.isNotEmpty && !_normalize(workshop.municipality).contains(city)) {
+      return false;
+    }
     if (normalizedQuery.isEmpty) return true;
     return [
       workshop.name,

@@ -138,6 +138,9 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
   bool get _locationSearchReady =>
       _department != null && _municipalitySearch.text.trim().isNotEmpty;
 
+  bool get _searchReady =>
+      _locationSearchReady || _search.text.trim().isNotEmpty;
+
   List<Workshop> _uniqueWorkshops(List<Workshop> items) {
     return canonicalWorkshops(items, preferredIds: _historyIds.toSet());
   }
@@ -316,8 +319,8 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
         const SizedBox(height: 16),
         LayoutBuilder(
           builder: (context, constraints) {
-            final filtersWidth = constraints.maxWidth >= 650
-                ? 532.0
+            final filtersWidth = constraints.maxWidth >= 760
+                ? 660.0
                 : constraints.maxWidth;
             return Wrap(
               spacing: 12,
@@ -327,6 +330,26 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
                   width: filtersWidth,
                   child: Row(
                     children: [
+                      SizedBox(
+                        width: 96,
+                        height: 50,
+                        child: OutlinedButton(
+                          onPressed: _clearFilters,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor: const Color(0xEF222428),
+                            side: const BorderSide(color: Color(0xFF4B4E53)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text(
+                            'Todos',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
                       Expanded(
                         flex: 5,
                         child: _FilterButton(
@@ -347,22 +370,25 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        flex: 6,
+                        flex: 5,
                         child: SizedBox(
                           height: 50,
                           child: TextField(
                             controller: _municipalitySearch,
                             textInputAction: TextInputAction.search,
                             decoration: InputDecoration(
-                              labelText: 'Municipio (escríbelo manualmente)',
-                              hintText: 'Ej.: Pasto, Popayán o La Cruz',
-                              helperText:
-                                  'Escribe el municipio; no necesitas seleccionarlo de una lista.',
-                              prefixIcon: const Icon(
-                                Icons.location_city_outlined,
+                              hintText: 'Municipio',
+                              hintStyle: const TextStyle(
+                                color: Color(0xFF909399),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 20,
                               ),
                               suffixIcon: _municipalitySearch.text.isEmpty
-                                  ? null
+                                  ? const Icon(
+                                      Icons.edit_outlined,
+                                      color: Color(0xFF9A9DA2),
+                                    )
                                   : IconButton(
                                       tooltip: 'Limpiar municipio',
                                       onPressed: _municipalitySearch.clear,
@@ -413,7 +439,7 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
                 style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
               ),
             ),
-            if (snapshot.hasData && _locationSearchReady)
+            if (snapshot.hasData && _searchReady)
               Text(
                 '${shown.length} ${shown.length == 1 ? 'taller' : 'talleres'}',
                 style: const TextStyle(color: Color(0xFFD0D1D3)),
@@ -427,9 +453,9 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
           _StatePanel.error(onAction: _reload)
         else if (items.isEmpty)
           const _StatePanel.empty('Todavía no hay talleres disponibles.')
-        else if (!_locationSearchReady)
+        else if (!_searchReady)
           const _StatePanel.empty(
-            'Selecciona el departamento y escribe el municipio o ciudad para buscar talleres disponibles.',
+            'Selecciona el departamento y escribe el municipio, o busca por nombre, ubicación o barrio.',
           )
         else if (shown.isEmpty)
           _StatePanel.empty(
