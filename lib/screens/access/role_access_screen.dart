@@ -3,18 +3,26 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../core/auth/admin_auth_controller.dart';
+import '../../core/auth/auth_service.dart';
 import '../../core/branding/workshop_brand.dart';
+import '../../core/client/client_profile.dart';
+import '../../core/client/client_profile_repository.dart';
+import '../../core/client/local_client_profile_store.dart';
+import '../../core/networking/api_client.dart';
+import '../../core/tenant/tenant_context.dart';
 import '../auth/admin_login_screen.dart';
-import '../dashboard/client_dashboard_screen.dart';
-import 'theme_color_dialog.dart';
+import '../auth/client_login_screen.dart';
+import '../workshop_selection/client_workshop_selection_screen.dart';
 
 class RoleAccessScreen extends StatefulWidget {
   const RoleAccessScreen({
     super.key,
+    required this.tenantContext,
     required this.brandController,
     required this.authController,
   });
 
+  final TenantContext tenantContext;
   final WorkshopBrandController brandController;
   final AdminAuthController authController;
 
@@ -25,189 +33,238 @@ class RoleAccessScreen extends StatefulWidget {
 class _RoleAccessScreenState extends State<RoleAccessScreen> {
   static const _backgroundAsset =
       'assets/images/workshop_login_background_v1.png';
+  static const _accent = Color(0xFFFF5A00);
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<WorkshopBrand>(
-      valueListenable: widget.brandController,
-      builder: (context, brand, _) {
-        return Scaffold(
-          body: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.asset(_backgroundAsset, fit: BoxFit.cover),
-              const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xBB000000),
-                      Color(0x77000000),
-                      Color(0xEB000000),
-                    ],
-                    stops: [0, .45, 1],
-                  ),
-                ),
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            _backgroundAsset,
+            fit: BoxFit.cover,
+            alignment: Alignment.center,
+          ),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0x66000000),
+                  Color(0x36000000),
+                  Color(0xA6000000),
+                ],
+                stops: [0, .5, 1],
               ),
-              SafeArea(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isWide = constraints.maxWidth >= 760;
-                    return SingleChildScrollView(
-                      padding: EdgeInsets.fromLTRB(
-                        isWide ? 48 : 20,
-                        16,
-                        isWide ? 48 : 28,
-                        28,
-                      ),
+            ),
+          ),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 760;
+                final isShort = constraints.maxHeight < 760;
+                final useCompactLayout = !isWide || isShort;
+                return SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isWide ? 36 : 18,
+                    vertical: useCompactLayout ? 16 : 28,
+                  ),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight - (isWide ? 64 : 44),
+                    ),
+                    child: Center(
                       child: ConstrainedBox(
                         constraints: BoxConstraints(
-                          minHeight: constraints.maxHeight - 44,
+                          maxWidth: useCompactLayout ? 620 : 700,
                         ),
-                        child: Column(
-                          children: [
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: _CustomizeButton(
-                                accentColor: brand.accentColor,
-                                onPressed: () => _openCustomizer(brand),
-                              ),
-                            ),
-                            SizedBox(height: isWide ? 16 : 8),
-                            _BrandHero(brand: brand, compact: isWide),
-                            const SizedBox(height: 26),
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 620),
-                              child: _GlassAccessCard(
-                                brand: brand,
-                                onAdmin: () => _goToAdminLogin(brand),
-                                onClient: () => _goToClientDashboard(brand),
-                              ),
-                            ),
-                          ],
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            top: useCompactLayout ? 52 : 62,
+                          ),
+                          child: _NeutralAccessCard(
+                            accentColor: _accent,
+                            compact: useCompactLayout,
+                            onAdmin: _goToAdminLogin,
+                            onClient: _goToClientAccess,
+                          ),
                         ),
                       ),
-                    );
-                  },
-                ),
-              ),
-            ],
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
-  void _goToAdminLogin(WorkshopBrand brand) {
+  void _goToAdminLogin() {
+    final brand = widget.brandController.value;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => AdminLoginScreen(
           brandController: widget.brandController,
           authController: widget.authController,
           brand: brand,
+          tenantContext: widget.tenantContext,
         ),
       ),
     );
   }
 
-  void _goToClientDashboard(WorkshopBrand brand) {
+  Future<void> _goToClientAccess() async {
+    final auth = AuthService();
+    final localProfiles = LocalClientProfileStore();
+    final user = auth.currentUser;
+    ClientProfile? profile;
+    if (user != null) {
+      final accountType = user.userMetadata?['account_type']?.toString();
+      if (accountType == 'client') {
+        profile = await ClientProfileRepository().getCurrentProfile();
+      } else {
+        // Cambiar de portal tambien cambia de identidad. Una sesion de taller
+        // nunca puede convertirse implicitamente en un perfil de cliente.
+        await auth.signOut();
+        await localProfiles.signOut();
+      }
+    } else if (!ApiClient.cloudEnabled) {
+      profile = await localProfiles.loadActive();
+    }
+    if (!mounted) return;
+
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ClientDashboardScreen(brand: brand),
-      ),
-    );
-  }
-
-  Future<void> _openCustomizer(WorkshopBrand brand) async {
-    await showDialog<void>(
-      context: context,
-      builder: (_) => ThemeColorDialog(
-        brand: brand,
-        onSave: widget.brandController.updateAccentColor,
+        builder: (_) => profile == null
+            ? ClientLoginScreen(
+                tenantContext: widget.tenantContext,
+                brandController: widget.brandController,
+                authController: widget.authController,
+              )
+            : ClientWorkshopSelectionScreen(
+                profile: profile,
+                tenantContext: widget.tenantContext,
+                brandController: widget.brandController,
+                authController: widget.authController,
+              ),
       ),
     );
   }
 }
 
-class _CustomizeButton extends StatelessWidget {
-  const _CustomizeButton({required this.accentColor, required this.onPressed});
+class _NeutralAccessCard extends StatelessWidget {
+  const _NeutralAccessCard({
+    required this.accentColor,
+    required this.compact,
+    required this.onAdmin,
+    required this.onClient,
+  });
 
   final Color accentColor;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(Icons.palette_outlined, color: accentColor),
-      label: const Text('Colores'),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white,
-        side: const BorderSide(color: Color(0xFF7A7A7A)),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      ),
-    );
-  }
-}
-
-class _BrandHero extends StatelessWidget {
-  const _BrandHero({required this.brand, required this.compact});
-
-  final WorkshopBrand brand;
   final bool compact;
+  final VoidCallback onAdmin;
+  final VoidCallback onClient;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final horizontalPadding = compact ? 18.0 : 30.0;
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.topCenter,
       children: [
-        _BrandMark(brand: brand, diameter: compact ? 126 : 108),
-        const SizedBox(height: 12),
-        Text(
-          brand.name,
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: compact ? 44 : 31,
-            height: .98,
-            letterSpacing: 1.3,
-            fontWeight: FontWeight.w900,
-            shadows: [Shadow(color: brand.accentColor, blurRadius: 16)],
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(width: 42, height: 1, color: brand.accentColor),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                brand.tagline.toUpperCase(),
-                style: const TextStyle(
-                  color: Color(0xFFE4E4E4),
-                  fontSize: 13,
-                  letterSpacing: 2.2,
-                  fontWeight: FontWeight.w500,
-                ),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(compact ? 25 : 32),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              width: double.infinity,
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                compact ? 76 : 84,
+                horizontalPadding,
+                compact ? 24 : 34,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xD9141518),
+                borderRadius: BorderRadius.circular(compact ? 25 : 32),
+                border: Border.all(color: const Color(0xBFE5E5E5)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x99000000),
+                    blurRadius: 34,
+                    offset: Offset(0, 18),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '¡Bienvenido!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: compact ? 32 : 42,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  SizedBox(height: compact ? 16 : 22),
+                  Text(
+                    'Selecciona cómo deseas ingresar',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: const Color(0xFFF0F0F0),
+                      fontSize: compact ? 17 : 23,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                  SizedBox(height: compact ? 28 : 34),
+                  _RoleButton(
+                    accentColor: accentColor,
+                    icon: Icons.admin_panel_settings_outlined,
+                    title: 'ADMINISTRADOR',
+                    subtitle: 'Gestiona tu negocio',
+                    primary: true,
+                    compact: compact,
+                    onTap: onAdmin,
+                  ),
+                  const SizedBox(height: 16),
+                  _RoleButton(
+                    accentColor: accentColor,
+                    icon: Icons.person_outline_rounded,
+                    title: 'CLIENTE',
+                    subtitle: 'Accede a servicios',
+                    compact: compact,
+                    onTap: onClient,
+                  ),
+                  SizedBox(height: compact ? 22 : 28),
+                  _FeatureRow(accentColor: accentColor, compact: compact),
+                ],
               ),
             ),
-            Container(width: 42, height: 1, color: brand.accentColor),
-          ],
+          ),
+        ),
+        Positioned(
+          top: compact ? -56 : -66,
+          child: _PlatformMark(
+            accentColor: accentColor,
+            diameter: compact ? 112 : 132,
+          ),
         ),
       ],
     );
   }
 }
 
-class _BrandMark extends StatelessWidget {
-  const _BrandMark({required this.brand, required this.diameter});
+class _PlatformMark extends StatelessWidget {
+  const _PlatformMark({required this.accentColor, required this.diameter});
 
-  final WorkshopBrand brand;
+  final Color accentColor;
   final double diameter;
 
   @override
@@ -217,147 +274,21 @@ class _BrandMark extends StatelessWidget {
       height: diameter,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: const Color(0xE6141517),
-        border: Border.all(color: brand.accentColor, width: 2),
+        color: const Color(0xF51B1C20),
+        border: Border.all(color: accentColor, width: 3),
         boxShadow: [
-          BoxShadow(
-            color: brand.accentColor.withValues(alpha: .55),
-            blurRadius: 28,
+          BoxShadow(color: accentColor.withValues(alpha: .42), blurRadius: 28),
+          const BoxShadow(
+            color: Color(0x88000000),
+            blurRadius: 22,
+            offset: Offset(0, 10),
           ),
         ],
       ),
-      child: brand.hasCustomLogo
-          ? ClipOval(
-              child: Image.memory(
-                brand.customLogoBytes!,
-                fit: BoxFit.cover,
-                filterQuality: FilterQuality.high,
-              ),
-            )
-          : Icon(brand.logoIcon, color: Colors.white, size: diameter * .56),
-    );
-  }
-}
-
-class _GlassAccessCard extends StatelessWidget {
-  const _GlassAccessCard({
-    required this.brand,
-    required this.onAdmin,
-    required this.onClient,
-  });
-
-  final WorkshopBrand brand;
-  final VoidCallback onAdmin;
-  final VoidCallback onClient;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(30),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(20, 32, 20, 20),
-          decoration: BoxDecoration(
-            color: const Color(0xC916171A),
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: const Color(0xBFFFFFFF)),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black54,
-                blurRadius: 26,
-                offset: Offset(0, 14),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Transform.translate(
-                offset: const Offset(0, -62),
-                child: _BrandMark(brand: brand, diameter: 86),
-              ),
-              Transform.translate(
-                offset: const Offset(0, -50),
-                child: Column(
-                  children: [
-                    const Text(
-                      '¡Bienvenido a!',
-                      style: TextStyle(color: Color(0xFFE7E7E7), fontSize: 20),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      brand.name,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: brand.accentColor,
-                        fontSize: 31,
-                        height: 1,
-                        letterSpacing: 1.1,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Selecciona cómo deseas ingresar',
-                      style: TextStyle(color: Color(0xFFE3E3E3), fontSize: 16),
-                    ),
-                  ],
-                ),
-              ),
-              Transform.translate(
-                offset: const Offset(0, -26),
-                child: Column(
-                  children: [
-                    _RoleButton(
-                      accentColor: brand.accentColor,
-                      icon: Icons.admin_panel_settings_outlined,
-                      title: 'ADMINISTRADOR',
-                      subtitle: 'Gestiona tu taller y equipo',
-                      primary: true,
-                      onTap: onAdmin,
-                    ),
-                    const SizedBox(height: 14),
-                    _RoleButton(
-                      accentColor: brand.accentColor,
-                      icon: Icons.person_outline_rounded,
-                      title: 'CLIENTE',
-                      subtitle: 'Acceso rápido y servicios',
-                      onTap: onClient,
-                    ),
-                  ],
-                ),
-              ),
-              Transform.translate(
-                offset: const Offset(0, -12),
-                child: _FeatureRow(accentColor: brand.accentColor),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(height: 1, color: brand.accentColor),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      'TU MOTO EN LAS MEJORES MANOS',
-                      style: TextStyle(
-                        color: Color(0xFFCECECE),
-                        fontSize: 10,
-                        letterSpacing: 2.2,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Container(height: 1, color: brand.accentColor),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+      child: Icon(
+        Icons.build_circle_outlined,
+        color: Colors.white,
+        size: diameter * .58,
       ),
     );
   }
@@ -369,6 +300,7 @@ class _RoleButton extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
+    required this.compact,
     required this.onTap,
     this.primary = false,
   });
@@ -377,6 +309,7 @@ class _RoleButton extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
+  final bool compact;
   final VoidCallback onTap;
   final bool primary;
 
@@ -391,31 +324,28 @@ class _RoleButton extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(22),
           child: Ink(
-            height: 112,
-            padding: const EdgeInsets.all(14),
+            height: compact ? 98 : 120,
+            padding: EdgeInsets.all(compact ? 12 : 15),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(22),
               border: Border.all(
-                color: primary ? accentColor : const Color(0xFF929292),
+                color: primary ? accentColor : const Color(0xFF85878B),
               ),
               gradient: primary
-                  ? LinearGradient(
-                      colors: [
-                        const Color(0xFF201710),
-                        accentColor.withValues(alpha: .92),
-                      ],
+                  ? const LinearGradient(
+                      colors: [Color(0xFF22170F), Color(0xFFFF5A00)],
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
                     )
                   : const LinearGradient(
-                      colors: [Color(0xD7232528), Color(0xB8232528)],
+                      colors: [Color(0xE52A2C30), Color(0xD1212327)],
                     ),
               boxShadow: primary
                   ? [
                       BoxShadow(
-                        color: accentColor.withValues(alpha: .32),
-                        blurRadius: 18,
-                        offset: const Offset(0, 8),
+                        color: accentColor.withValues(alpha: .22),
+                        blurRadius: 20,
+                        offset: const Offset(0, 9),
                       ),
                     ]
                   : null,
@@ -423,22 +353,22 @@ class _RoleButton extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: 76,
-                  height: 76,
+                  width: compact ? 66 : 84,
+                  height: compact ? 66 : 84,
                   decoration: BoxDecoration(
-                    color: const Color(0x66000000),
+                    color: const Color(0x800B0C0E),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
-                      color: primary ? accentColor : const Color(0xFF7B7B7B),
+                      color: primary ? accentColor : const Color(0xFF73767B),
                     ),
                   ),
                   child: Icon(
                     icon,
                     color: primary ? accentColor : Colors.white,
-                    size: 39,
+                    size: compact ? 34 : 42,
                   ),
                 ),
-                const SizedBox(width: 18),
+                SizedBox(width: compact ? 16 : 26),
                 Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -446,26 +376,31 @@ class _RoleButton extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
-                          fontSize: 20,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: compact ? 18 : 23,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 5),
                       Text(
                         subtitle,
-                        style: const TextStyle(
-                          color: Color(0xFFE1E1E1),
-                          fontSize: 15,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: const Color(0xFFE6E6E6),
+                          fontSize: compact ? 14 : 17,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
                   color: Colors.white,
-                  size: 38,
+                  size: compact ? 34 : 42,
                 ),
               ],
             ),
@@ -477,261 +412,62 @@ class _RoleButton extends StatelessWidget {
 }
 
 class _FeatureRow extends StatelessWidget {
-  const _FeatureRow({required this.accentColor});
+  const _FeatureRow({required this.accentColor, required this.compact});
 
   final Color accentColor;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     const features = [
-      (Icons.lock_outline_rounded, 'SEGURIDAD', 'Tus datos protegidos'),
-      (Icons.verified_outlined, 'CONFIANZA', 'Servicio profesional'),
-      (Icons.workspace_premium_outlined, 'CALIDAD', 'Repuestos originales'),
+      (Icons.lock_outline_rounded, 'SEGURIDAD'),
+      (Icons.verified_outlined, 'CONFIANZA'),
+      (Icons.workspace_premium_outlined, 'CALIDAD'),
     ];
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         for (var index = 0; index < features.length; index++) ...[
           Expanded(
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 48,
-                  height: 48,
+                  width: compact ? 46 : 58,
+                  height: compact ? 46 : 58,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: accentColor),
+                    border: Border.all(color: accentColor, width: 1.5),
                   ),
-                  child: Icon(features[index].$1, color: accentColor, size: 25),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  features[index].$2,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                  child: Icon(
+                    features[index].$1,
+                    color: accentColor,
+                    size: compact ? 24 : 29,
                   ),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  features[index].$3,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Color(0xFFCDCDCD),
-                    fontSize: 10,
+                const SizedBox(height: 9),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    features[index].$2,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: compact ? 10 : 13,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
           if (index != features.length - 1)
-            Container(width: 1, height: 66, color: const Color(0xFF626262)),
+            Container(
+              width: 1,
+              height: compact ? 62 : 74,
+              color: const Color(0xFF686A6D),
+            ),
         ],
       ],
-    );
-  }
-}
-
-class _BrandCustomizationDialog extends StatefulWidget {
-  const _BrandCustomizationDialog({required this.brand, required this.onSave});
-
-  final WorkshopBrand brand;
-  final void Function({
-    required String name,
-    required String tagline,
-    required int logoIndex,
-    required int accentColorValue,
-  })
-  onSave;
-
-  @override
-  State<_BrandCustomizationDialog> createState() =>
-      _BrandCustomizationDialogState();
-}
-
-class _BrandCustomizationDialogState extends State<_BrandCustomizationDialog> {
-  static const _colors = [
-    0xFFFF6200,
-    0xFF00B8D9,
-    0xFF8E5BFF,
-    0xFF20C77A,
-    0xFFE83E8C,
-  ];
-  late final TextEditingController _nameController;
-  late final TextEditingController _taglineController;
-  late int _logoIndex;
-  late int _colorValue;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(text: widget.brand.name);
-    _taglineController = TextEditingController(text: widget.brand.tagline);
-    _logoIndex = widget.brand.logoIndex;
-    _colorValue = widget.brand.accentColorValue;
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _taglineController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = Color(_colorValue);
-    return AlertDialog(
-      backgroundColor: const Color(0xFF1A1B1F),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      title: const Text('Personaliza tu taller'),
-      content: SizedBox(
-        width: 420,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _DialogField(
-                controller: _nameController,
-                label: 'Nombre del negocio',
-                icon: Icons.storefront_outlined,
-              ),
-              const SizedBox(height: 16),
-              _DialogField(
-                controller: _taglineController,
-                label: 'Descripción corta',
-                icon: Icons.short_text_rounded,
-              ),
-              const SizedBox(height: 22),
-              const Text(
-                'Logo del taller',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  for (
-                    var index = 0;
-                    index < workshopLogoOptions.length;
-                    index++
-                  )
-                    ChoiceChip(
-                      label: Icon(
-                        workshopLogoOptions[index],
-                        color: _logoIndex == index
-                            ? Colors.white
-                            : const Color(0xFFBDBDBD),
-                      ),
-                      selected: _logoIndex == index,
-                      selectedColor: accent,
-                      backgroundColor: const Color(0xFF282A2E),
-                      onSelected: (_) => setState(() => _logoIndex = index),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 22),
-              const Text(
-                'Color principal',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 12,
-                children: [
-                  for (final colorValue in _colors)
-                    InkWell(
-                      onTap: () => setState(() => _colorValue = colorValue),
-                      borderRadius: BorderRadius.circular(22),
-                      child: Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: Color(colorValue),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: _colorValue == colorValue
-                                ? Colors.white
-                                : Colors.transparent,
-                            width: 3,
-                          ),
-                        ),
-                        child: _colorValue == colorValue
-                            ? const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 18,
-                              )
-                            : null,
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Los cambios se reflejan inmediatamente en esta sesión. Conecta este controlador al perfil del tenant para guardarlos en tu backend.',
-                style: TextStyle(
-                  color: Color(0xFFBABABA),
-                  fontSize: 12,
-                  height: 1.35,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton.icon(
-          onPressed: () {
-            widget.onSave(
-              name: _nameController.text,
-              tagline: _taglineController.text,
-              logoIndex: _logoIndex,
-              accentColorValue: _colorValue,
-            );
-            Navigator.pop(context);
-          },
-          style: FilledButton.styleFrom(backgroundColor: accent),
-          icon: const Icon(Icons.save_outlined),
-          label: const Text('Guardar'),
-        ),
-      ],
-    );
-  }
-}
-
-class _DialogField extends StatelessWidget {
-  const _DialogField({
-    required this.controller,
-    required this.label,
-    required this.icon,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      textCapitalization: TextCapitalization.words,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon),
-        filled: true,
-        fillColor: const Color(0xFF25272B),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
-      ),
     );
   }
 }

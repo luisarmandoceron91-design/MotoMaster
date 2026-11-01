@@ -1,0 +1,56 @@
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:moto_master/core/workshops/client_workshop_search.dart';
+import 'package:moto_master/core/workshops/workshop.dart';
+
+void main() {
+  final workshops = [
+    const Workshop(
+      id: 'jose',
+      name: 'Motos Jose',
+      slug: 'motos-jose',
+      tagline: '',
+      accentColorValue: 0xFFFF6500,
+      department: 'Cauca',
+      municipality: 'Popayán',
+      neighborhood: 'La Esmeralda',
+    ),
+    const Workshop(
+      id: 'elite',
+      name: 'Moto Elite',
+      slug: 'moto-elite',
+      tagline: '',
+      accentColorValue: 0xFFFF6500,
+      department: 'Nariño',
+      municipality: 'La Cruz',
+    ),
+  ];
+
+  test('no publica todos los talleres antes de elegir ubicación', () {
+    expect(
+      filterWorkshopsForClientSearch(
+        workshops: workshops,
+        department: null,
+        municipality: '',
+      ),
+      isEmpty,
+    );
+    expect(
+      filterWorkshopsForClientSearch(
+        workshops: workshops,
+        department: 'Cauca',
+        municipality: '',
+      ),
+      isEmpty,
+    );
+  });
+
+  test('muestra únicamente talleres del departamento y municipio buscados', () {
+    final result = filterWorkshopsForClientSearch(
+      workshops: workshops,
+      department: 'Cauca',
+      municipality: 'Popayan',
+    );
+    expect(result.map((workshop) => workshop.id), ['jose']);
+  });
+}

@@ -5,7 +5,16 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/auth/admin_auth_controller.dart';
+import '../../core/auth/auth_service.dart';
+import '../../core/auth/local_workshop_admin_store.dart';
 import '../../core/branding/workshop_brand.dart';
+import '../../core/branding/workshop_dashboard_preferences.dart';
+import '../../core/location/colombia_locations.dart';
+import '../../core/tenant/tenant_context.dart';
+import '../../core/tenant/tenant_model.dart';
+import '../../core/workshops/local_workshop_directory_store.dart';
+import '../../core/workshops/workshop.dart';
+import '../../core/workshops/workshop_repository.dart';
 import '../dashboard/admin_dashboard_screen.dart';
 
 /// Personalización protegida: solo se muestra después de validar la sesión del
@@ -14,11 +23,13 @@ class AdminCustomizationScreen extends StatefulWidget {
   const AdminCustomizationScreen({
     super.key,
     required this.brandController,
-    required this.authController,
+    this.authController,
+    required this.tenantContext,
   });
 
   final WorkshopBrandController brandController;
-  final AdminAuthController authController;
+  final AdminAuthController? authController;
+  final TenantContext tenantContext;
 
   @override
   State<AdminCustomizationScreen> createState() =>
@@ -38,11 +49,23 @@ class _AdminCustomizationScreenState extends State<AdminCustomizationScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _taglineController;
+  late final TextEditingController _municipalityController;
+  late final TextEditingController _neighborhoodController;
+  late final TextEditingController _addressController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _opensController;
+  late final TextEditingController _closesController;
+  String? _department;
   late int _logoIndex;
   late int _colorValue;
   Uint8List? _logoBytes;
   String? _logoFileName;
   bool _isPickingLogo = false;
+  bool _isSaving = false;
+  double _textScale = 1;
+  double _dashboardBrightness = 1;
+  bool _compactMode = false;
 
   @override
   void initState() {
@@ -50,16 +73,32 @@ class _AdminCustomizationScreenState extends State<AdminCustomizationScreen> {
     final brand = widget.brandController.value;
     _nameController = TextEditingController(text: brand.name);
     _taglineController = TextEditingController(text: brand.tagline);
+    _municipalityController = TextEditingController();
+    _neighborhoodController = TextEditingController();
+    _addressController = TextEditingController();
+    _phoneController = TextEditingController();
+    _emailController = TextEditingController();
+    _opensController = TextEditingController(text: '08:00');
+    _closesController = TextEditingController(text: '18:00');
     _logoIndex = brand.logoIndex;
     _colorValue = brand.accentColorValue;
     _logoBytes = brand.customLogoBytes;
     _logoFileName = brand.customLogoFileName;
+    _loadWorkshopDetails();
+    _loadDashboardPreferences();
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _taglineController.dispose();
+    _municipalityController.dispose();
+    _neighborhoodController.dispose();
+    _addressController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    _opensController.dispose();
+    _closesController.dispose();
     super.dispose();
   }
 
@@ -202,7 +241,9 @@ class _AdminCustomizationScreenState extends State<AdminCustomizationScreen> {
                                       ),
                                       const Spacer(),
                                       FilledButton.icon(
-                                        onPressed: _saveAndContinue,
+                                        onPressed: _isSaving
+                                            ? null
+                                            : _saveAndContinue,
                                         style: FilledButton.styleFrom(
                                           backgroundColor: accent,
                                           foregroundColor: Colors.black,
@@ -211,12 +252,24 @@ class _AdminCustomizationScreenState extends State<AdminCustomizationScreen> {
                                             vertical: 16,
                                           ),
                                         ),
-                                        icon: const Icon(
-                                          Icons.check_circle_outline_rounded,
-                                        ),
-                                        label: const Text(
-                                          'Guardar y continuar',
-                                          style: TextStyle(
+                                        icon: _isSaving
+                                            ? const SizedBox.square(
+                                                dimension: 18,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2.2,
+                                                      color: Colors.black,
+                                                    ),
+                                              )
+                                            : const Icon(
+                                                Icons
+                                                    .check_circle_outline_rounded,
+                                              ),
+                                        label: Text(
+                                          _isSaving
+                                              ? 'Guardando...'
+                                              : 'Guardar y continuar',
+                                          style: const TextStyle(
                                             fontWeight: FontWeight.w800,
                                           ),
                                         ),
@@ -257,6 +310,82 @@ class _AdminCustomizationScreenState extends State<AdminCustomizationScreen> {
               ? 'Ingresa el nombre de tu taller.'
               : null,
         ),
+        const SizedBox(height: 20),
+        const _SectionLabel(
+          icon: Icons.location_on_outlined,
+          title: 'Ubicación y contacto',
+        ),
+        const SizedBox(height: 14),
+        _SelectionField(
+          label: 'Departamento',
+          value: _department,
+          icon: Icons.map_outlined,
+          values: colombiaLocations.keys.toList()..sort(),
+          onChanged: (value) => setState(() {
+            _department = value;
+            _municipalityController.clear();
+          }),
+        ),
+        const SizedBox(height: 12),
+        _BrandTextField(
+          controller: _municipalityController,
+          label: 'Ciudad o municipio',
+          icon: Icons.location_city_outlined,
+          validator: _required('Escribe la ciudad o el municipio.'),
+        ),
+        const SizedBox(height: 12),
+        _BrandTextField(
+          controller: _neighborhoodController,
+          label: 'Barrio',
+          icon: Icons.holiday_village_outlined,
+          validator: _required('Ingresa el barrio.'),
+        ),
+        const SizedBox(height: 12),
+        _BrandTextField(
+          controller: _addressController,
+          label: 'Dirección',
+          icon: Icons.signpost_outlined,
+          validator: _required('Ingresa la dirección.'),
+        ),
+        const SizedBox(height: 12),
+        _BrandTextField(
+          controller: _phoneController,
+          label: 'Teléfono o celular del taller',
+          icon: Icons.phone_outlined,
+          validator: _required('Ingresa un teléfono de contacto.'),
+        ),
+        const SizedBox(height: 12),
+        _BrandTextField(
+          controller: _emailController,
+          label: 'Correo del taller (opcional)',
+          icon: Icons.alternate_email_rounded,
+          validator: (value) {
+            final email = value?.trim() ?? '';
+            return email.isNotEmpty && !email.contains('@')
+                ? 'Ingresa un correo válido.'
+                : null;
+          },
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _WorkshopTimeField(
+                label: 'Abre',
+                value: _formatTime12h(_opensController.text),
+                onTap: () => _pickWorkshopTime(_opensController),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _WorkshopTimeField(
+                label: 'Cierra',
+                value: _formatTime12h(_closesController.text),
+                onTap: () => _pickWorkshopTime(_closesController),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 16),
         _BrandTextField(
           controller: _taglineController,
@@ -288,6 +417,51 @@ class _AdminCustomizationScreenState extends State<AdminCustomizationScreen> {
             color: Colors.white.withValues(alpha: .58),
             fontSize: 12,
           ),
+        ),
+        const SizedBox(height: 26),
+        const _SectionLabel(
+          icon: Icons.tune_rounded,
+          title: 'Comodidad visual del panel',
+        ),
+        const SizedBox(height: 14),
+        _AppearanceSlider(
+          icon: Icons.format_size_rounded,
+          title: 'Tamaño de letra',
+          valueLabel: '${(_textScale * 100).round()} %',
+          value: _textScale,
+          min: .85,
+          max: 1.25,
+          divisions: 8,
+          accent: accent,
+          onChanged: (value) => setState(() => _textScale = value),
+        ),
+        const SizedBox(height: 12),
+        _AppearanceSlider(
+          icon: Icons.brightness_6_outlined,
+          title: 'Brillo del panel',
+          valueLabel: '${(_dashboardBrightness * 100).round()} %',
+          value: _dashboardBrightness,
+          min: .72,
+          max: 1.15,
+          divisions: 9,
+          accent: accent,
+          onChanged: (value) => setState(() => _dashboardBrightness = value),
+        ),
+        const SizedBox(height: 12),
+        SwitchListTile.adaptive(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+          value: _compactMode,
+          activeThumbColor: accent,
+          activeTrackColor: accent.withValues(alpha: .42),
+          title: const Text(
+            'Vista compacta',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          subtitle: const Text(
+            'Muestra más información en pantallas pequeñas.',
+          ),
+          secondary: Icon(Icons.view_compact_alt_outlined, color: accent),
+          onChanged: (value) => setState(() => _compactMode = value),
         ),
       ],
     );
@@ -419,28 +593,247 @@ class _AdminCustomizationScreenState extends State<AdminCustomizationScreen> {
   }
 
   Future<void> _saveAndContinue() async {
+    if (_isSaving) return;
     if (!_formKey.currentState!.validate()) return;
-    await widget.brandController.updateBrand(
-      name: _nameController.text,
-      tagline: _taglineController.text,
-      logoIndex: _logoIndex,
-      accentColorValue: _colorValue,
-      customLogoBytes: _logoBytes,
-      customLogoFileName: _logoFileName,
-      clearCustomLogo: _logoBytes == null,
+    if (_timeValidator(_opensController.text) != null ||
+        _timeValidator(_closesController.text) != null) {
+      _showMessage('Selecciona una hora válida de apertura y cierre.');
+      return;
+    }
+    if (_department == null || _municipalityController.text.trim().isEmpty) {
+      _showMessage('Selecciona el departamento y escribe el municipio.');
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      final creatingWorkshop = widget.tenantContext.currentTenantId.isEmpty;
+      if (creatingWorkshop) {
+        final repository = WorkshopRepository();
+        final workshop = await repository.create(
+          name: _nameController.text,
+          slug: _slugify(_nameController.text),
+          tagline: _taglineController.text,
+          accentColor: _colorValue,
+          logoIndex: _logoIndex,
+          department: _department!,
+          municipality: _municipalityController.text.trim(),
+          neighborhood: _neighborhoodController.text,
+          address: _addressController.text,
+          phone: _phoneController.text,
+          email: _emailController.text,
+          openingHours: _openingHours,
+        );
+        await widget.tenantContext.setTenant(
+          Tenant(tenantId: workshop.id, name: workshop.name),
+        );
+      }
+      if (creatingWorkshop) {
+        final associationError = await LocalWorkshopAdminStore()
+            .attachWorkshopToActiveAccount(
+              tenantId: widget.tenantContext.currentTenantId,
+              tenantName: _nameController.text,
+            );
+        if (associationError != null && AuthService().currentUser == null) {
+          throw StateError(associationError);
+        }
+      }
+      await widget.brandController.updateBrand(
+        tenantId: widget.tenantContext.currentTenantId,
+        name: _nameController.text,
+        tagline: _taglineController.text,
+        logoIndex: _logoIndex,
+        accentColorValue: _colorValue,
+        customLogoBytes: _logoBytes,
+        customLogoFileName: _logoFileName,
+        clearCustomLogo: _logoBytes == null,
+      );
+      await const WorkshopDashboardPreferencesStore().save(
+        widget.tenantContext.currentTenantId,
+        WorkshopDashboardPreferences(
+          textScale: _textScale,
+          brightness: _dashboardBrightness,
+          compactMode: _compactMode,
+        ),
+      );
+      final directory = LocalWorkshopDirectoryStore();
+      final previous = await directory.find(
+        widget.tenantContext.currentTenantId,
+      );
+      final now = DateTime.now();
+      await WorkshopRepository().save(
+        Workshop(
+          id: widget.tenantContext.currentTenantId,
+          name: _nameController.text.trim(),
+          slug: previous?.slug ?? _slugify(_nameController.text),
+          tagline: _taglineController.text.trim(),
+          accentColorValue: _colorValue,
+          logoIndex: _logoIndex,
+          logoBytes: _logoBytes,
+          logoFileName: _logoFileName,
+          department: _department!,
+          municipality: _municipalityController.text.trim(),
+          neighborhood: _neighborhoodController.text.trim(),
+          address: _addressController.text.trim(),
+          phone: _phoneController.text.trim(),
+          email: _emailController.text.trim().toLowerCase(),
+          openingHours: _openingHours,
+          accessStatus: previous?.accessStatus ?? 'trial',
+          trialStartedAt: previous?.trialStartedAt ?? now,
+          trialEndsAt:
+              previous?.trialEndsAt ?? now.add(const Duration(days: 3)),
+          permanentAccess: previous?.permanentAccess ?? false,
+        ),
+      );
+      await _openDashboard();
+    } catch (error) {
+      if (!mounted) return;
+      _showMessage(_saveErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  String _saveErrorMessage(Object error) {
+    final message = error.toString().toLowerCase();
+    if (message.contains('papelera')) {
+      return 'Este taller está en la papelera. Restáuralo desde el panel del propietario.';
+    }
+    if (message.contains('failed to fetch') ||
+        message.contains('network') ||
+        message.contains('socketexception')) {
+      return 'No pudimos conectar con la base de datos. Revisa tu conexión e inténtalo de nuevo.';
+    }
+    if (message.contains('auth') || message.contains('sesion')) {
+      return 'Tu sesión venció. Inicia sesión nuevamente para guardar el taller.';
+    }
+    return 'No fue posible guardar el taller. Tus datos no se perdieron; inténtalo nuevamente.';
+  }
+
+  Map<String, dynamic> get _openingHours => {
+    for (final day in const [
+      'monday',
+      'tuesday',
+      'wednesday',
+      'thursday',
+      'friday',
+      'saturday',
+    ])
+      day: {
+        'open': _opensController.text.trim(),
+        'close': _closesController.text.trim(),
+      },
+    'sunday': {'closed': true},
+  };
+
+  String? Function(String?) _required(String message) =>
+      (value) => value == null || value.trim().isEmpty ? message : null;
+
+  String? _timeValidator(String? value) =>
+      RegExp(r'^(?:[01]\d|2[0-3]):[0-5]\d$').hasMatch(value?.trim() ?? '')
+      ? null
+      : 'Usa HH:MM';
+
+  Future<void> _pickWorkshopTime(TextEditingController controller) async {
+    final parts = controller.text.split(':');
+    final initial = parts.length == 2
+        ? TimeOfDay(
+            hour: int.tryParse(parts.first) ?? 8,
+            minute: int.tryParse(parts.last) ?? 0,
+          )
+        : const TimeOfDay(hour: 8, minute: 0);
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      helpText: 'Selecciona la hora',
+      cancelText: 'Cancelar',
+      confirmText: 'Aceptar',
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+        child: child!,
+      ),
     );
+    if (selected == null || !mounted) return;
+    controller.text =
+        '${selected.hour.toString().padLeft(2, '0')}:'
+        '${selected.minute.toString().padLeft(2, '0')}';
+    setState(() {});
+  }
+
+  String _formatTime12h(String value) {
+    final parts = value.split(':');
+    if (parts.length != 2) return value;
+    final hour = int.tryParse(parts.first);
+    final minute = int.tryParse(parts.last);
+    if (hour == null || minute == null) return value;
+    final hour12 = hour % 12 == 0 ? 12 : hour % 12;
+    final period = hour < 12 ? 'a. m.' : 'p. m.';
+    return '$hour12:${minute.toString().padLeft(2, '0')} $period';
+  }
+
+  Future<void> _loadWorkshopDetails() async {
+    final id = widget.tenantContext.currentTenantId;
+    if (id.isEmpty) return;
+    final workshop = await LocalWorkshopDirectoryStore().find(id);
+    if (workshop == null || !mounted) return;
+    setState(() {
+      _department = workshop.department.isEmpty ? null : workshop.department;
+      _municipalityController.text = workshop.municipality;
+      _neighborhoodController.text = workshop.neighborhood;
+      _addressController.text = workshop.address;
+      _phoneController.text = workshop.phone;
+      _emailController.text = workshop.email;
+      final monday = workshop.openingHours['monday'];
+      if (monday is Map) {
+        _opensController.text = monday['open']?.toString() ?? '08:00';
+        _closesController.text = monday['close']?.toString() ?? '18:00';
+      }
+    });
+  }
+
+  Future<void> _loadDashboardPreferences() async {
+    final id = widget.tenantContext.currentTenantId;
+    if (id.isEmpty) return;
+    final preferences = await const WorkshopDashboardPreferencesStore().load(
+      id,
+    );
+    if (!mounted) return;
+    setState(() {
+      _textScale = preferences.textScale;
+      _dashboardBrightness = preferences.brightness;
+      _compactMode = preferences.compactMode;
+    });
+  }
+
+  String _slugify(String value) {
+    final normalized = value
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-|-$'), '');
+    return '$normalized-${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  Future<void> _continueWithoutSaving() async {
+    if (widget.tenantContext.currentTenantId.isEmpty) {
+      await _saveAndContinue();
+      return;
+    }
     _openDashboard();
   }
 
-  void _continueWithoutSaving() => _openDashboard();
-
-  void _openDashboard() {
+  Future<void> _openDashboard() async {
+    final localAccount = await LocalWorkshopAdminStore().loadAccount();
+    if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
         builder: (_) => AdminDashboardScreen(
           brandController: widget.brandController,
-          authController: widget.authController,
-          userName: widget.authController.username,
+          userName:
+              AuthService().currentUser?.email ??
+              localAccount?.fullName ??
+              'Administrador del taller',
+          tenantContext: widget.tenantContext,
+          localAdminStore: LocalWorkshopAdminStore(),
         ),
       ),
     );
@@ -493,6 +886,42 @@ class _SectionLabel extends StatelessWidget {
   );
 }
 
+class _WorkshopTimeField extends StatelessWidget {
+  const _WorkshopTimeField({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(8),
+    child: InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: const Icon(Icons.schedule_rounded),
+        suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded),
+        filled: true,
+        fillColor: const Color(0xFF292B30),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF44484E)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF44484E)),
+        ),
+      ),
+      child: Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+    ),
+  );
+}
+
 class _BrandTextField extends StatelessWidget {
   const _BrandTextField({
     required this.controller,
@@ -518,6 +947,114 @@ class _BrandTextField extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         borderSide: BorderSide.none,
       ),
+    ),
+  );
+}
+
+class _SelectionField extends StatelessWidget {
+  const _SelectionField({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.values,
+    required this.onChanged,
+  });
+  final String label;
+  final String? value;
+  final IconData icon;
+  final List<String> values;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) => DropdownButtonFormField<String>(
+    key: ValueKey('$label:$value:${values.length}'),
+    initialValue: values.contains(value) ? value : null,
+    isExpanded: true,
+    decoration: InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon),
+      filled: true,
+      fillColor: const Color(0xFF292B30),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
+      ),
+    ),
+    items: values
+        .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+        .toList(),
+    onChanged: values.isEmpty ? null : onChanged,
+    validator: (selected) =>
+        selected == null || selected.isEmpty ? 'Selecciona una opción.' : null,
+  );
+}
+
+class _AppearanceSlider extends StatelessWidget {
+  const _AppearanceSlider({
+    required this.icon,
+    required this.title,
+    required this.valueLabel,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.accent,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String title;
+  final String valueLabel;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final Color accent;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+    decoration: BoxDecoration(
+      color: const Color(0xFF24262B),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: Colors.white.withValues(alpha: .1)),
+    ),
+    child: Column(
+      children: [
+        Row(
+          children: [
+            Icon(icon, color: accent, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: .14),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                valueLabel,
+                style: TextStyle(color: accent, fontWeight: FontWeight.w900),
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          value: value,
+          min: min,
+          max: max,
+          divisions: divisions,
+          activeColor: accent,
+          label: valueLabel,
+          onChanged: onChanged,
+        ),
+      ],
     ),
   );
 }

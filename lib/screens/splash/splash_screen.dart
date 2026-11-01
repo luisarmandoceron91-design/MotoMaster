@@ -1,54 +1,246 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
-
 import '../../core/auth/admin_auth_controller.dart';
+import '../../core/auth/admin_oauth_intent_store.dart';
+import '../../core/auth/auth_service.dart';
 import '../../core/branding/workshop_brand.dart';
+import '../../core/tenant/tenant_context.dart';
 import '../access/role_access_screen.dart';
+import '../auth/admin_login_screen.dart';
+import '../auth/client_login_screen.dart';
+import '../auth/new_password_screen.dart';
 
-/// Pantalla 1: Splash universal de Moto Master.
-/// La imagen visual es un recurso incluido dentro del propio proyecto.
-/// No se redibuja ni se agregan elementos por código.
-class SplashScreen extends StatelessWidget {
+class SplashScreen extends StatefulWidget {
   const SplashScreen({
     super.key,
+    required this.tenantContext,
     required this.brandController,
     required this.authController,
   });
 
+  final TenantContext tenantContext;
   final WorkshopBrandController brandController;
   final AdminAuthController authController;
 
-  static const String _asset =
-      'assets/images/moto_master_splash_aprobada_v1.png';
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _rideController;
+  late final Animation<double> _ride;
+
+  @override
+  void initState() {
+    super.initState();
+    _rideController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..forward();
+    _ride = CurvedAnimation(
+      parent: _rideController,
+      curve: Curves.easeInOutCubic,
+    );
+    _navigateToNext();
+  }
+
+  @override
+  void dispose() {
+    _rideController.dispose();
+    super.dispose();
+  }
+
+  void _navigateToNext() async {
+    await Future.delayed(const Duration(milliseconds: 2700));
+    if (!mounted) return;
+
+    final pendingGoogle = await AdminOAuthIntentStore().pendingIntent();
+    if (!mounted) return;
+    final isPasswordRecovery =
+        Uri.base.queryParameters['recovery'] == 'password';
+    if (isPasswordRecovery && AuthService().isAuthenticated) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => NewPasswordScreen(
+            onCompleted: (recoveryContext) {
+              if (!mounted) return;
+              Navigator.of(recoveryContext).pushAndRemoveUntil(
+                MaterialPageRoute<void>(builder: (_) => _roleAccessScreen()),
+                (_) => false,
+              );
+            },
+          ),
+        ),
+      );
+      return;
+    }
+    if (pendingGoogle == GoogleAccountIntent.administrator &&
+        AuthService().isAuthenticated) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => AdminLoginScreen(
+            tenantContext: widget.tenantContext,
+            brandController: widget.brandController,
+            authController: widget.authController,
+            brand: widget.brandController.value,
+            resumeGoogleSignIn: true,
+          ),
+        ),
+      );
+      return;
+    }
+    if (pendingGoogle == GoogleAccountIntent.client &&
+        AuthService().isAuthenticated) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => ClientLoginScreen(
+            tenantContext: widget.tenantContext,
+            brandController: widget.brandController,
+            authController: widget.authController,
+            resumeGoogleSignIn: true,
+          ),
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => _roleAccessScreen()));
+  }
+
+  RoleAccessScreen _roleAccessScreen() => RoleAccessScreen(
+    tenantContext: widget.tenantContext,
+    brandController: widget.brandController,
+    authController: widget.authController,
+  );
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          Navigator.of(context).pushReplacement(
-            PageRouteBuilder<void>(
-              pageBuilder: (context, animation, secondaryAnimation) =>
-                  FadeTransition(
-                    opacity: animation,
-                    child: RoleAccessScreen(
-                      brandController: brandController,
-                      authController: authController,
-                    ),
-                  ),
-              transitionDuration: const Duration(milliseconds: 360),
-            ),
-          );
-        },
-        child: SizedBox.expand(
-          child: Image.asset(
-            _asset,
-            fit: BoxFit.contain,
-            alignment: Alignment.center,
-            filterQuality: FilterQuality.high,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/images/owner_service_bays_background_v1.png',
+            fit: BoxFit.cover,
           ),
-        ),
+          const ColoredBox(color: Color(0xB3050709)),
+          SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        height: 150,
+                        child: LayoutBuilder(
+                          builder: (context, box) => AnimatedBuilder(
+                            animation: _ride,
+                            builder: (context, _) {
+                              final progress = _ride.value;
+                              final x =
+                                  -100 + ((box.maxWidth + 200) * progress);
+                              final y = math.sin(progress * math.pi * 8) * 2.5;
+                              final edgeFade = (progress < .12)
+                                  ? progress / .12
+                                  : (progress > .88)
+                                  ? (1 - progress) / .12
+                                  : 1.0;
+                              return Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  Transform.translate(
+                                    offset: Offset(x - 58, 86 + y),
+                                    child: Opacity(
+                                      opacity: edgeFade.clamp(0, 1),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        children: [
+                                          Container(
+                                            width: 52,
+                                            height: 2,
+                                            color: const Color(0xFFFF6500),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Container(
+                                            width: 34,
+                                            height: 2,
+                                            color: const Color(0x99FF6500),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  Transform.translate(
+                                    offset: Offset(x, 30 + y),
+                                    child: Opacity(
+                                      opacity: edgeFade.clamp(0, 1),
+                                      child: const Icon(
+                                        Icons.two_wheeler_rounded,
+                                        size: 86,
+                                        color: Colors.white,
+                                        shadows: [
+                                          Shadow(
+                                            color: Color(0xFFFF6500),
+                                            blurRadius: 20,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      FadeTransition(
+                        opacity: CurvedAnimation(
+                          parent: _rideController,
+                          curve: const Interval(.18, .7),
+                        ),
+                        child: const Text(
+                          'GESTIÓN INTELIGENTE PARA TALLERES',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      SizedBox(
+                        width: 190,
+                        child: AnimatedBuilder(
+                          animation: _rideController,
+                          builder: (context, _) => LinearProgressIndicator(
+                            value: _rideController.value,
+                            minHeight: 3,
+                            borderRadius: BorderRadius.circular(2),
+                            backgroundColor: Colors.white24,
+                            valueColor: const AlwaysStoppedAnimation(
+                              Color(0xFFFF6500),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

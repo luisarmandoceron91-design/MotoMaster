@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/auth/admin_auth_controller.dart';
 import '../../core/branding/workshop_brand.dart';
-import '../dashboard/admin_dashboard_screen.dart';
+import '../../core/security/password_policy.dart';
 
 enum _RecoveryMethod { email, sms }
 
@@ -26,15 +26,22 @@ class PasswordRecoveryScreen extends StatefulWidget {
 class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
   final _destinationController = TextEditingController();
   final _codeController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmationController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   _RecoveryMethod _method = _RecoveryMethod.email;
   int _step = 0;
   String? _codeError;
+  String? _resetError;
+  bool _obscurePassword = true;
+  bool _obscureConfirmation = true;
 
   @override
   void dispose() {
     _destinationController.dispose();
     _codeController.dispose();
+    _newPasswordController.dispose();
+    _confirmationController.dispose();
     super.dispose();
   }
 
@@ -74,7 +81,9 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
                       duration: const Duration(milliseconds: 220),
                       child: _step == 0
                           ? _requestBody(accent)
-                          : _codeBody(accent),
+                          : _step == 1
+                          ? _codeBody(accent)
+                          : _resetBody(accent),
                     ),
                   ),
                 ),
@@ -165,6 +174,11 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
                   value.replaceAll(RegExp(r'[^0-9]'), '').length < 8) {
                 return 'Ingresa un número válido.';
               }
+              if (!widget.authController.matchesRecoveryDestination(value)) {
+                return isEmail
+                    ? 'No coincide con el correo registrado.'
+                    : 'No coincide con el celular registrado.';
+              }
               return null;
             },
           ),
@@ -189,7 +203,7 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
           ),
           const SizedBox(height: 14),
           Text(
-            'Nunca mostraremos si una cuenta existe o no.',
+            'Usa el correo o celular que guardaste en tu perfil de propietario.',
             style: TextStyle(
               color: Colors.white.withValues(alpha: .58),
               fontSize: 12,
@@ -270,7 +284,7 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
               ),
               icon: const Icon(Icons.verified_outlined),
               label: const Text(
-                'Verificar y entrar',
+                'Verificar código',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
             ),
@@ -302,6 +316,113 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
     );
   }
 
+  Widget _resetBody(Color accent) {
+    return Form(
+      key: _formKey,
+      child: Column(
+        key: const ValueKey('reset'),
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _BackButton(
+            onPressed: () => setState(() {
+              _step = 1;
+              _resetError = null;
+            }),
+          ),
+          const SizedBox(height: 12),
+          Icon(Icons.password_rounded, color: accent, size: 44),
+          const SizedBox(height: 18),
+          const Text(
+            'Crea una nueva contraseña',
+            style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Tu usuario es ${widget.authController.username}. La nueva contraseña debe tener mínimo 6 caracteres.',
+          ),
+          const SizedBox(height: 22),
+          _passwordField(
+            controller: _newPasswordController,
+            label: 'Nueva contraseña',
+            obscure: _obscurePassword,
+            onToggle: () =>
+                setState(() => _obscurePassword = !_obscurePassword),
+          ),
+          const SizedBox(height: 14),
+          _passwordField(
+            controller: _confirmationController,
+            label: 'Confirmar contraseña',
+            obscure: _obscureConfirmation,
+            confirmation: true,
+            onToggle: () =>
+                setState(() => _obscureConfirmation = !_obscureConfirmation),
+          ),
+          if (_resetError != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _resetError!,
+              style: const TextStyle(color: Color(0xFFFF8C8C)),
+            ),
+          ],
+          const SizedBox(height: 22),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: FilledButton.icon(
+              onPressed: _saveNewPassword,
+              style: FilledButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: Colors.black,
+              ),
+              icon: const Icon(Icons.lock_reset_rounded),
+              label: const Text(
+                'Guardar nueva contraseña',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _passwordField({
+    required TextEditingController controller,
+    required String label,
+    required bool obscure,
+    required VoidCallback onToggle,
+    bool confirmation = false,
+  }) => TextFormField(
+    controller: controller,
+    obscureText: obscure,
+    validator: (value) {
+      final policyError = validateStrongPassword(value);
+      if (policyError != null) return policyError;
+      if (confirmation && value != _newPasswordController.text) {
+        return 'Las contraseñas no coinciden.';
+      }
+      return null;
+    },
+    decoration: InputDecoration(
+      labelText: label,
+      prefixIcon: const Icon(Icons.lock_outline_rounded),
+      suffixIcon: IconButton(
+        tooltip: obscure ? 'Mostrar contraseña' : 'Ocultar contraseña',
+        onPressed: onToggle,
+        icon: Icon(
+          obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+        ),
+      ),
+      filled: true,
+      fillColor: const Color(0xFF292B30),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
+      ),
+    ),
+  );
+
   void _sendCode() {
     if (_step == 0 && !_formKey.currentState!.validate()) return;
     setState(() {
@@ -318,15 +439,28 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
       );
       return;
     }
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(
-        builder: (_) => AdminDashboardScreen(
-          brandController: widget.brandController,
-          authController: widget.authController,
-          userName: widget.authController.username,
-        ),
+    setState(() {
+      _step = 2;
+      _codeError = null;
+    });
+  }
+
+  Future<void> _saveNewPassword() async {
+    if (!_formKey.currentState!.validate()) return;
+    final error = await widget.authController.resetPasswordWithRecovery(
+      code: _codeController.text,
+      newPassword: _newPasswordController.text,
+    );
+    if (!mounted) return;
+    if (error != null) {
+      setState(() => _resetError = error);
+      return;
+    }
+    Navigator.of(context).pop();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Contraseña actualizada. Ya puedes iniciar sesión.'),
       ),
-      (route) => route.isFirst,
     );
   }
 }

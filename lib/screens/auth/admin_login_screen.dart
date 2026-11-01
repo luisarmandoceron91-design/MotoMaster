@@ -1,8 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/admin_auth_controller.dart';
+import '../../core/auth/admin_access_service.dart';
+import '../../core/auth/auth_service.dart';
+import '../../core/auth/admin_oauth_intent_store.dart';
+import '../../core/auth/local_workshop_admin_store.dart';
 import '../../core/branding/workshop_brand.dart';
+import '../../core/networking/api_client.dart';
+import '../../core/tenant/tenant_context.dart';
+import '../../core/tenant/tenant_model.dart';
+import '../../core/workshops/workshop.dart';
+import '../../core/workshops/workshop_repository.dart';
 import '../admin_customization/admin_customization_screen.dart';
+import '../dashboard/admin_dashboard_screen.dart';
+import '../owner/owner_profile_screen.dart';
+import '../owner/owner_dashboard_screen.dart';
+import 'account_recovery_screen.dart';
+import 'admin_activation_screen.dart';
 import 'password_recovery_screen.dart';
 
 class AdminLoginScreen extends StatefulWidget {
@@ -11,22 +26,51 @@ class AdminLoginScreen extends StatefulWidget {
     required this.brandController,
     required this.authController,
     required this.brand,
+    required this.tenantContext,
+    this.resumeGoogleSignIn = false,
   });
 
   final WorkshopBrandController brandController;
   final AdminAuthController authController;
   final WorkshopBrand brand;
+  final TenantContext tenantContext;
+  final bool resumeGoogleSignIn;
 
   @override
   State<AdminLoginScreen> createState() => _AdminLoginScreenState();
 }
 
 class _AdminLoginScreenState extends State<AdminLoginScreen> {
+  static const _cloudFeaturesEnabled = ApiClient.cloudEnabled;
+  static const _googleSignInEnabled = ApiClient.cloudEnabled;
   final _formKey = GlobalKey<FormState>();
   final _userController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isLoading = false;
   String? _loginError;
+  final _localAdminStore = LocalWorkshopAdminStore();
+
+  String get _ownerContact {
+    final values = <String>{
+      widget.authController.publicContact.trim(),
+      widget.authController.phone.trim(),
+      widget.authController.email.trim(),
+    }..removeWhere((value) => value.isEmpty);
+    return values.isEmpty ? 'contacto del desarrollador' : values.join(' · ');
+  }
+
+  String get _suspendedMessage =>
+      'Este taller está cerrado temporalmente. Comunícate con el desarrollador '
+      'de la aplicación para solicitar la activación: $_ownerContact.';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.resumeGoogleSignIn) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _resumeGoogle());
+    }
+  }
 
   @override
   void dispose() {
@@ -37,7 +81,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final accent = widget.brand.accentColor;
+    const accent = Color(0xFFFF6500);
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
@@ -51,7 +95,12 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xE6000000), Color(0xCE000000)],
+                colors: [
+                  Color(0x66000000),
+                  Color(0x36000000),
+                  Color(0xA6000000),
+                ],
+                stops: [0, .5, 1],
               ),
             ),
           ),
@@ -93,18 +142,17 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          Text(
-                            widget.brand.name,
+                          const Text(
+                            'PORTAL DE GESTIÓN',
                             style: TextStyle(
                               color: accent,
                               fontWeight: FontWeight.w800,
-                              letterSpacing: 1.25,
                             ),
                           ),
                           const SizedBox(height: 28),
                           _LoginField(
                             controller: _userController,
-                            label: 'Usuario o correo',
+                            label: 'Usuario o correo electrónico',
                             icon: Icons.person_outline_rounded,
                             keyboardType: TextInputType.emailAddress,
                             textInputAction: TextInputAction.next,
@@ -158,7 +206,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                             width: double.infinity,
                             height: 54,
                             child: FilledButton.icon(
-                              onPressed: _signIn,
+                              onPressed: _isLoading ? null : _signIn,
                               style: FilledButton.styleFrom(
                                 backgroundColor: accent,
                                 foregroundColor: Colors.black,
@@ -166,7 +214,14 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                               ),
-                              icon: const Icon(Icons.login_rounded),
+                              icon: _isLoading
+                                  ? const SizedBox.square(
+                                      dimension: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.login_rounded),
                               label: const Text(
                                 'Ingresar al panel',
                                 style: TextStyle(fontWeight: FontWeight.w800),
@@ -176,23 +231,37 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                           const SizedBox(height: 20),
                           const _LoginDivider(),
                           const SizedBox(height: 20),
-                          _GoogleButton(onPressed: _showGoogleSetup),
-                          AnimatedBuilder(
-                            animation: widget.authController,
-                            builder: (context, _) {
-                              if (!widget
-                                  .authController
-                                  .isUsingInitialCredentials) {
-                                return const SizedBox(height: 10);
-                              }
-                              return Column(
-                                children: [
-                                  const SizedBox(height: 22),
-                                  _InitialAccessHint(accent: accent),
-                                  const SizedBox(height: 14),
-                                ],
-                              );
-                            },
+                          _GoogleButton(
+                            onPressed: _googleSignInEnabled && !_isLoading
+                                ? _continueWithGoogle
+                                : null,
+                          ),
+                          const SizedBox(height: 14),
+                          OutlinedButton.icon(
+                            onPressed: _isLoading ? null : _registerAdmin,
+                            icon: const Icon(
+                              Icons.person_add_alt_1_rounded,
+                              size: 19,
+                            ),
+                            label: const Text('Crear cuenta de administrador'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: accent,
+                              side: const BorderSide(color: accent),
+                              minimumSize: const Size.fromHeight(48),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          const Text(
+                            'Primer acceso: usuario admin y contraseña 123456. Después debes crear credenciales personales.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Color(0xFFAAAEB5),
+                              fontSize: 12,
+                              height: 1.35,
+                            ),
                           ),
                           TextButton.icon(
                             onPressed: () => Navigator.of(context).pop(),
@@ -222,34 +291,246 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     if (_loginError != null) setState(() => _loginError = null);
   }
 
-  void _signIn() {
+  Future<void> _signIn() async {
     if (!_formKey.currentState!.validate()) return;
-    final isValid = widget.authController.authenticate(
+    if (widget.authController.authenticate(
       username: _userController.text,
       password: _passwordController.text,
+    )) {
+      await _connectOwnerCloudSession(_passwordController.text);
+      if (widget.authController.hasOwnerProfile) {
+        _openOwnerDashboard();
+      } else {
+        _openOwnerProfile();
+      }
+      return;
+    }
+    if (_localAdminStore.isBootstrapCredential(
+      _userController.text,
+      _passwordController.text,
+    )) {
+      await _registerAdmin();
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _loginError = null;
+    });
+    try {
+      final localAccount = _cloudFeaturesEnabled
+          ? null
+          : await _localAdminStore.authenticate(
+              username: _userController.text,
+              password: _passwordController.text,
+            );
+      if (localAccount != null) {
+        if (!localAccount.canEnter) {
+          final message =
+              localAccount.accessState == WorkshopAccessState.suspended
+              ? _suspendedMessage
+              : 'El acceso de prueba venció. Solicita más tiempo al propietario de la plataforma.';
+          setState(() => _loginError = message);
+          return;
+        }
+        if (!localAccount.hasWorkshop) {
+          await widget.tenantContext.clear();
+          widget.brandController.value = WorkshopBrand.newWorkshop;
+          if (mounted) _openCustomization();
+          return;
+        }
+        await widget.tenantContext.setTenant(
+          Tenant(
+            tenantId: localAccount.tenantId,
+            name: localAccount.tenantName,
+          ),
+        );
+        await widget.brandController.load(localAccount.tenantId);
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute<void>(
+              builder: (_) => AdminDashboardScreen(
+                brandController: widget.brandController,
+                userName: localAccount.fullName.isEmpty
+                    ? localAccount.username
+                    : localAccount.fullName,
+                tenantContext: widget.tenantContext,
+                localAdminStore: _localAdminStore,
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      if (!_cloudFeaturesEnabled) {
+        setState(() => _loginError = 'Usuario o contraseña incorrectos.');
+        return;
+      }
+      await AuthService().signIn(
+        email: _userController.text,
+        password: _passwordController.text,
+      );
+      final accessFuture = AdminAccessService().resolveRole();
+      final workshopsFuture = WorkshopRepository().listManaged();
+      final accessRole = await accessFuture;
+      if (accessRole == AdminAccessRole.workshopSuspended) {
+        await AuthService().signOut();
+        if (mounted) {
+          setState(() => _loginError = _suspendedMessage);
+        }
+        return;
+      }
+      if (accessRole == AdminAccessRole.workshopExpired) {
+        await AuthService().signOut();
+        if (mounted) {
+          setState(
+            () => _loginError =
+                'El acceso de prueba venció. Solicita más tiempo al propietario de la plataforma.',
+          );
+        }
+        return;
+      }
+      if (accessRole == null) {
+        final user = AuthService().currentUser;
+        final accountType = user?.userMetadata?['account_type']?.toString();
+        if (user != null && accountType == 'admin') {
+          final registrationError = await _localAdminStore.register(
+            password: _passwordController.text,
+            fullName:
+                user.userMetadata?['full_name']?.toString() ??
+                user.email ??
+                'Administrador',
+            email: user.email ?? _userController.text,
+            phone: user.userMetadata?['phone']?.toString() ?? '',
+          );
+          if (registrationError != null &&
+              !registrationError.toLowerCase().contains('registrad')) {
+            throw StateError(registrationError);
+          }
+          await widget.tenantContext.clear();
+          widget.brandController.value = WorkshopBrand.newWorkshop;
+          if (mounted) _openCustomization();
+          return;
+        }
+        await AuthService().signOut();
+        if (mounted) {
+          setState(
+            () => _loginError =
+                'Esta cuenta no tiene acceso administrativo activo.',
+          );
+        }
+        return;
+      }
+      await _enterAdminPanel(preloadedWorkshops: await workshopsFuture);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _loginError = 'Correo o contraseña incorrectos.');
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _connectOwnerCloudSession(String password) async {
+    if (!ApiClient.cloudEnabled) return;
+    final auth = AuthService();
+    try {
+      if (auth.isAuthenticated) {
+        final role = await AdminAccessService().resolveRole();
+        if (role == AdminAccessRole.platformOwner) return;
+        await auth.signOut();
+      }
+      final ownerEmail = widget.authController.email.trim();
+      if (ownerEmail.isEmpty) return;
+      await auth.signIn(email: ownerEmail, password: password);
+      final role = await AdminAccessService().resolveRole();
+      if (role != AdminAccessRole.platformOwner) await auth.signOut();
+    } catch (_) {
+      if (auth.isAuthenticated) await auth.signOut();
+    }
+  }
+
+  void _openOwnerProfile() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => OwnerProfileScreen(
+          authController: widget.authController,
+          tenantContext: widget.tenantContext,
+          brandController: widget.brandController,
+        ),
+      ),
     );
-    if (!isValid) {
-      setState(
-        () => _loginError =
-            'Usuario o contraseña incorrectos. Inténtalo de nuevo.',
+  }
+
+  void _openOwnerDashboard() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => OwnerDashboardScreen(
+          authController: widget.authController,
+          tenantContext: widget.tenantContext,
+          brandController: widget.brandController,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _enterAdminPanel({List<Workshop>? preloadedWorkshops}) async {
+    final workshops =
+        preloadedWorkshops ?? await WorkshopRepository().listManaged();
+    if (workshops.isNotEmpty) {
+      final workshop = workshops.first;
+      await widget.tenantContext.setTenant(
+        Tenant(tenantId: workshop.id, name: workshop.name),
+      );
+      widget.brandController.value = WorkshopBrand(
+        name: workshop.name,
+        tagline: workshop.tagline,
+        logoIndex: workshop.logoIndex,
+        accentColorValue: workshop.accentColorValue,
+        customLogoBytes: workshop.logoBytes,
+        customLogoFileName: workshop.logoFileName,
+      );
+      if (!mounted) return;
+      final cloudUser = AuthService().currentUser;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => AdminDashboardScreen(
+            brandController: widget.brandController,
+            userName:
+                cloudUser?.userMetadata?['full_name']
+                        ?.toString()
+                        .trim()
+                        .isNotEmpty ==
+                    true
+                ? cloudUser!.userMetadata!['full_name'].toString()
+                : cloudUser?.email ?? 'Administrador del taller',
+            tenantContext: widget.tenantContext,
+          ),
+        ),
       );
       return;
     }
+    await widget.tenantContext.clear();
+    widget.brandController.value = WorkshopBrand.newWorkshop;
+    if (mounted) _openCustomization();
+  }
+
+  void _openCustomization() {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
         builder: (_) => AdminCustomizationScreen(
           brandController: widget.brandController,
           authController: widget.authController,
+          tenantContext: widget.tenantContext,
         ),
       ),
     );
   }
 
-  void _openPasswordRecovery() {
-    Navigator.of(context).push(
+  Future<void> _registerAdmin() async {
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => PasswordRecoveryScreen(
-          brand: widget.brand,
+        builder: (_) => AdminActivationScreen(
+          tenantContext: widget.tenantContext,
           brandController: widget.brandController,
           authController: widget.authController,
         ),
@@ -257,38 +538,142 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     );
   }
 
-  void _showGoogleSetup() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: const Color(0xFF202126),
-      showDragHandle: true,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Continuar con Google',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'El botón está listo en el flujo. Para iniciar sesión de verdad se debe conectar Google OAuth con el Client ID de tu proyecto y la API de Moto Master.',
-              style: TextStyle(color: Color(0xFFD2D2D2), height: 1.4),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Entendido'),
-              ),
-            ),
-          ],
+  Future<void> _openPasswordRecovery() async {
+    final account = _userController.text.trim();
+    if (account.isEmpty) {
+      setState(() => _loginError = 'Escribe primero tu usuario.');
+      return;
+    }
+    if (account.toLowerCase() == widget.authController.username.toLowerCase()) {
+      if (!widget.authController.hasOwnerProfile) {
+        setState(
+          () => _loginError =
+              'Primero inicia con la clave inicial y registra tu correo y celular.',
+        );
+        return;
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => PasswordRecoveryScreen(
+            brand: widget.brand,
+            brandController: widget.brandController,
+            authController: widget.authController,
+          ),
+        ),
+      );
+      return;
+    }
+    if (!account.contains('@')) {
+      setState(
+        () => _loginError =
+            'Los administradores de talleres ingresan y recuperan su cuenta mediante el correo registrado.',
+      );
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AccountRecoveryScreen(
+          accountType: RecoveryAccountType.administrator,
+          initialEmail: account,
         ),
       ),
     );
+  }
+
+  Future<void> _continueWithGoogle() async {
+    setState(() {
+      _isLoading = true;
+      _loginError = null;
+    });
+    final intentStore = AdminOAuthIntentStore();
+    try {
+      await intentStore.markPending(GoogleAccountIntent.administrator);
+      final started = await AuthService().signInWithGoogle();
+      if (!started) {
+        await intentStore.clear();
+        if (mounted) {
+          setState(
+            () => _loginError = 'No fue posible abrir el acceso con Google.',
+          );
+        }
+      }
+    } catch (error) {
+      await intentStore.clear();
+      if (mounted) {
+        final message = error is AuthException
+            ? error.message
+            : 'No fue posible conectar con Google.';
+        setState(() => _loginError = message);
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _resumeGoogle() async {
+    final intentStore = AdminOAuthIntentStore();
+    if (await intentStore.pendingIntent() !=
+        GoogleAccountIntent.administrator) {
+      return;
+    }
+    await intentStore.clear();
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _loginError = null;
+    });
+    try {
+      final accessRole = await AdminAccessService().resolveRole();
+      if (accessRole == AdminAccessRole.platformOwner) {
+        _openOwnerDashboard();
+        return;
+      }
+      if (accessRole == AdminAccessRole.workshopSuspended) {
+        await AuthService().signOut();
+        if (mounted) {
+          setState(
+            () => _loginError =
+                'Este taller está desactivado. El propietario de la plataforma debe reactivarlo.',
+          );
+        }
+        return;
+      }
+      if (accessRole == AdminAccessRole.workshopExpired) {
+        await AuthService().signOut();
+        if (mounted) {
+          setState(
+            () => _loginError =
+                'El acceso de prueba venció. Solicita más tiempo al propietario de la plataforma.',
+          );
+        }
+        return;
+      }
+      if (accessRole == AdminAccessRole.workshopOwner ||
+          accessRole == AdminAccessRole.workshopStaff) {
+        await _enterAdminPanel();
+        return;
+      }
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => AdminActivationScreen(
+            tenantContext: widget.tenantContext,
+            brandController: widget.brandController,
+            authController: widget.authController,
+            existingGoogleAccount: true,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () =>
+              _loginError = 'No se pudo verificar la cuenta de Google: $error',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 }
 
@@ -408,7 +793,7 @@ class _LoginDivider extends StatelessWidget {
 
 class _GoogleButton extends StatelessWidget {
   const _GoogleButton({required this.onPressed});
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   @override
   Widget build(BuildContext context) => SizedBox(
     width: double.infinity,
@@ -452,37 +837,6 @@ class _GoogleMark extends StatelessWidget {
         fontSize: 17,
         fontWeight: FontWeight.w900,
       ),
-    ),
-  );
-}
-
-class _InitialAccessHint extends StatelessWidget {
-  const _InitialAccessHint({required this.accent});
-  final Color accent;
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(13),
-    decoration: BoxDecoration(
-      color: accent.withValues(alpha: .09),
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: accent.withValues(alpha: .38)),
-    ),
-    child: const Row(
-      children: [
-        Icon(Icons.info_outline_rounded, color: Color(0xFFFF9B59)),
-        SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            'Primer acceso\nUsuario: admin  •  Contraseña: 123456',
-            style: TextStyle(
-              color: Color(0xFFFFD8C0),
-              fontSize: 12,
-              height: 1.35,
-            ),
-          ),
-        ),
-      ],
     ),
   );
 }

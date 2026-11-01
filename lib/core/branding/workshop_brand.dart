@@ -1,12 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Identidad visible del taller actual. En producción estos valores deben
-/// provenir del tenant autenticado; este controlador permite probar la
-/// personalización de forma inmediata en la interfaz.
 @immutable
 class WorkshopBrand {
   const WorkshopBrand({
@@ -25,6 +21,13 @@ class WorkshopBrand {
     accentColorValue: 0xFFFF6200,
   );
 
+  static const newWorkshop = WorkshopBrand(
+    name: 'TU TALLER',
+    tagline: 'Describe brevemente tu negocio',
+    logoIndex: 0,
+    accentColorValue: 0xFFFF6200,
+  );
+
   final String name;
   final String tagline;
   final int logoIndex;
@@ -33,10 +36,8 @@ class WorkshopBrand {
   final String? customLogoFileName;
 
   Color get accentColor => Color(accentColorValue);
-
   bool get hasCustomLogo =>
       customLogoBytes != null && customLogoBytes!.isNotEmpty;
-
   IconData get logoIcon =>
       workshopLogoOptions[logoIndex.clamp(0, workshopLogoOptions.length - 1)];
 
@@ -64,7 +65,7 @@ class WorkshopBrand {
   }
 }
 
-const List<IconData> workshopLogoOptions = <IconData>[
+const List<IconData> workshopLogoOptions = [
   Icons.build_circle_outlined,
   Icons.motorcycle_outlined,
   Icons.handyman_outlined,
@@ -75,41 +76,35 @@ const List<IconData> workshopLogoOptions = <IconData>[
 class WorkshopBrandController extends ValueNotifier<WorkshopBrand> {
   WorkshopBrandController() : super(WorkshopBrand.defaultBrand);
 
-  static const _nameKey = 'brand_name';
-  static const _taglineKey = 'brand_tagline';
-  static const _logoIndexKey = 'brand_logo_index';
-  static const _accentKey = 'brand_accent_color';
-  static const _customLogoKey = 'brand_custom_logo';
-  static const _customLogoFileNameKey = 'brand_custom_logo_file_name';
-
-  Future<void> load() async {
-    final preferences = await SharedPreferences.getInstance();
+  Future<void> load(String tenantId) async {
+    final prefs = await SharedPreferences.getInstance();
     Uint8List? logoBytes;
-    final encodedLogo = preferences.getString(_customLogoKey);
+    final encodedLogo = prefs.getString('brand_${tenantId}_logo');
     if (encodedLogo != null) {
       try {
         logoBytes = base64Decode(encodedLogo);
-      } on FormatException {
-        await preferences.remove(_customLogoKey);
-      }
+      } catch (_) {}
     }
     value = WorkshopBrand(
-      name: preferences.getString(_nameKey) ?? WorkshopBrand.defaultBrand.name,
+      name:
+          prefs.getString('brand_${tenantId}_name') ??
+          WorkshopBrand.defaultBrand.name,
       tagline:
-          preferences.getString(_taglineKey) ??
+          prefs.getString('brand_${tenantId}_tagline') ??
           WorkshopBrand.defaultBrand.tagline,
       logoIndex:
-          preferences.getInt(_logoIndexKey) ??
+          prefs.getInt('brand_${tenantId}_index') ??
           WorkshopBrand.defaultBrand.logoIndex,
       accentColorValue:
-          preferences.getInt(_accentKey) ??
+          prefs.getInt('brand_${tenantId}_color') ??
           WorkshopBrand.defaultBrand.accentColorValue,
       customLogoBytes: logoBytes,
-      customLogoFileName: preferences.getString(_customLogoFileNameKey),
+      customLogoFileName: prefs.getString('brand_${tenantId}_file'),
     );
   }
 
   Future<void> updateBrand({
+    required String tenantId,
     String? name,
     String? tagline,
     int? logoIndex,
@@ -119,10 +114,10 @@ class WorkshopBrandController extends ValueNotifier<WorkshopBrand> {
     bool clearCustomLogo = false,
   }) async {
     value = value.copyWith(
-      name: name == null || name.trim().isEmpty
+      name: (name == null || name.trim().isEmpty)
           ? value.name
           : name.trim().toUpperCase(),
-      tagline: tagline == null || tagline.trim().isEmpty
+      tagline: (tagline == null || tagline.trim().isEmpty)
           ? value.tagline
           : tagline.trim(),
       logoIndex: logoIndex,
@@ -131,32 +126,32 @@ class WorkshopBrandController extends ValueNotifier<WorkshopBrand> {
       customLogoFileName: customLogoFileName,
       clearCustomLogo: clearCustomLogo,
     );
-    await _persist();
+    await _persist(tenantId);
   }
 
-  Future<void> updateAccentColor(int accentColorValue) async {
-    value = value.copyWith(accentColorValue: accentColorValue);
-    await _persist();
+  Future<void> updateAccentColor(String tenantId, int color) async {
+    value = value.copyWith(accentColorValue: color);
+    await _persist(tenantId);
   }
 
-  Future<void> _persist() async {
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setString(_nameKey, value.name);
-    await preferences.setString(_taglineKey, value.tagline);
-    await preferences.setInt(_logoIndexKey, value.logoIndex);
-    await preferences.setInt(_accentKey, value.accentColorValue);
+  Future<void> _persist(String tenantId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('brand_${tenantId}_name', value.name);
+    await prefs.setString('brand_${tenantId}_tagline', value.tagline);
+    await prefs.setInt('brand_${tenantId}_index', value.logoIndex);
+    await prefs.setInt('brand_${tenantId}_color', value.accentColorValue);
     if (value.hasCustomLogo) {
-      await preferences.setString(
-        _customLogoKey,
+      await prefs.setString(
+        'brand_${tenantId}_logo',
         base64Encode(value.customLogoBytes!),
       );
-      await preferences.setString(
-        _customLogoFileNameKey,
+      await prefs.setString(
+        'brand_${tenantId}_file',
         value.customLogoFileName ?? 'logo_personalizado',
       );
     } else {
-      await preferences.remove(_customLogoKey);
-      await preferences.remove(_customLogoFileNameKey);
+      await prefs.remove('brand_${tenantId}_logo');
+      await prefs.remove('brand_${tenantId}_file');
     }
   }
 }

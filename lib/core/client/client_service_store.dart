@@ -1,0 +1,518 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+import 'package:moto_master/core/networking/api_client.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+const clientServiceStages = <String>[
+  'Cita solicitada',
+  'Moto recibida',
+  'En diagnóstico',
+  'En reparación',
+  'Pruebas finales',
+  'Lista para entregar',
+  'Entregada',
+];
+
+const appointmentCancellationNotice = Duration(hours: 24);
+
+class AppointmentSlotUnavailableException implements Exception {
+  const AppointmentSlotUnavailableException();
+}
+
+class AppointmentCancellationNotAllowedException implements Exception {
+  const AppointmentCancellationNotAllowedException();
+}
+
+class AppointmentPersistenceException implements Exception {
+  const AppointmentPersistenceException();
+}
+
+class ClientMotorcycle {
+  const ClientMotorcycle({
+    required this.id,
+    required this.brand,
+    required this.model,
+    required this.plate,
+    required this.year,
+    required this.color,
+  });
+
+  final String id;
+  final String brand;
+  final String model;
+  final String plate;
+  final String year;
+  final String color;
+
+  String get displayName => '$brand $model';
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'brand': brand,
+    'model': model,
+    'plate': plate,
+    'year': year,
+    'color': color,
+  };
+
+  factory ClientMotorcycle.fromMap(Map<String, dynamic> map) =>
+      ClientMotorcycle(
+        id: map['id']?.toString() ?? '',
+        brand: map['brand']?.toString() ?? '',
+        model: map['model']?.toString() ?? '',
+        plate: map['plate']?.toString() ?? '',
+        year: map['year']?.toString() ?? '',
+        color: map['color']?.toString() ?? '',
+      );
+}
+
+class ClientAppointment {
+  const ClientAppointment({
+    required this.id,
+    required this.motorcycleId,
+    required this.motorcycleName,
+    required this.serviceType,
+    required this.date,
+    required this.time,
+    required this.notes,
+    this.status = 'Solicitada',
+    this.workshopId = '',
+    this.clientId = '',
+    this.serviceStage = 'Cita solicitada',
+    this.mechanicName = '',
+    this.updatedAt,
+  });
+
+  final String id;
+  final String motorcycleId;
+  final String motorcycleName;
+  final String serviceType;
+  final DateTime date;
+  final String time;
+  final String notes;
+  final String status;
+  final String workshopId;
+  final String clientId;
+  final String serviceStage;
+  final String mechanicName;
+  final DateTime? updatedAt;
+
+  bool get isCancelled => status == 'Cancelada';
+
+  DateTime get startsAt {
+    final parts = time.split(':');
+    final hour = parts.isEmpty ? 0 : int.tryParse(parts.first) ?? 0;
+    final minute = parts.length < 2 ? 0 : int.tryParse(parts[1]) ?? 0;
+    return DateTime(date.year, date.month, date.day, hour, minute);
+  }
+
+  bool canBeCancelled([DateTime? now]) {
+    if (isCancelled || serviceStage != 'Cita solicitada') return false;
+    return startsAt.difference(now ?? DateTime.now()) >=
+        appointmentCancellationNotice;
+  }
+
+  ClientAppointment copyWith({
+    String? id,
+    String? status,
+    String? workshopId,
+    String? clientId,
+    String? serviceStage,
+    String? mechanicName,
+    DateTime? updatedAt,
+  }) => ClientAppointment(
+    id: id ?? this.id,
+    motorcycleId: motorcycleId,
+    motorcycleName: motorcycleName,
+    serviceType: serviceType,
+    date: date,
+    time: time,
+    notes: notes,
+    status: status ?? this.status,
+    workshopId: workshopId ?? this.workshopId,
+    clientId: clientId ?? this.clientId,
+    serviceStage: serviceStage ?? this.serviceStage,
+    mechanicName: mechanicName ?? this.mechanicName,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'motorcycle_id': motorcycleId,
+    'motorcycle_name': motorcycleName,
+    'service_type': serviceType,
+    'date': date.toIso8601String(),
+    'time': time,
+    'notes': notes,
+    'status': status,
+    'workshop_id': workshopId,
+    'client_id': clientId,
+    'service_stage': serviceStage,
+    'mechanic_name': mechanicName,
+    'updated_at': updatedAt?.toIso8601String(),
+  };
+
+  factory ClientAppointment.fromMap(Map<String, dynamic> map) =>
+      ClientAppointment(
+        id: map['id']?.toString() ?? '',
+        motorcycleId: map['motorcycle_id']?.toString() ?? '',
+        motorcycleName: map['motorcycle_name']?.toString() ?? '',
+        serviceType: map['service_type']?.toString() ?? '',
+        date:
+            DateTime.tryParse(map['date']?.toString() ?? '') ?? DateTime.now(),
+        time: map['time']?.toString() ?? '',
+        notes: map['notes']?.toString() ?? '',
+        status: map['status']?.toString() ?? 'Solicitada',
+        workshopId: map['workshop_id']?.toString() ?? '',
+        clientId: map['client_id']?.toString() ?? '',
+        serviceStage: map['service_stage']?.toString() ?? 'Cita solicitada',
+        mechanicName: map['mechanic_name']?.toString() ?? '',
+        updatedAt: DateTime.tryParse(map['updated_at']?.toString() ?? ''),
+      );
+}
+
+class ClientServiceStore {
+  static final ValueNotifier<int> revision = ValueNotifier<int>(0);
+  static const _globalAppointmentsKey = 'client_appointments_global_v1';
+
+  String _scope(String workshopId, String clientId) {
+    final raw = '${workshopId}_$clientId'.toLowerCase();
+    return raw.replaceAll(RegExp(r'[^a-z0-9_-]'), '_');
+  }
+
+  Future<List<ClientMotorcycle>> listMotorcycles(
+    String workshopId,
+    String clientId,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    final encoded = preferences.getString(
+      'client_motorcycles_${_scope(workshopId, clientId)}',
+    );
+    if (encoded == null) return const [];
+    try {
+      return (jsonDecode(encoded) as List)
+          .whereType<Map>()
+          .map(
+            (item) => ClientMotorcycle.fromMap(Map<String, dynamic>.from(item)),
+          )
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> saveMotorcycle(
+    String workshopId,
+    String clientId,
+    ClientMotorcycle motorcycle,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    final items = [...await listMotorcycles(workshopId, clientId)];
+    final index = items.indexWhere((item) => item.id == motorcycle.id);
+    if (index < 0) {
+      items.add(motorcycle);
+    } else {
+      items[index] = motorcycle;
+    }
+    await preferences.setString(
+      'client_motorcycles_${_scope(workshopId, clientId)}',
+      jsonEncode(items.map((item) => item.toMap()).toList()),
+    );
+  }
+
+  Future<List<ClientAppointment>> listAppointments(
+    String workshopId,
+    String clientId,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    final encoded = preferences.getString(
+      'client_appointments_${_scope(workshopId, clientId)}',
+    );
+    if (encoded == null) return const [];
+    try {
+      final items = (jsonDecode(encoded) as List)
+          .whereType<Map>()
+          .map(
+            (item) =>
+                ClientAppointment.fromMap(Map<String, dynamic>.from(item)),
+          )
+          .toList();
+      items.sort((a, b) {
+        final date = a.date.compareTo(b.date);
+        return date == 0 ? a.time.compareTo(b.time) : date;
+      });
+      return items;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> saveAppointment(
+    String workshopId,
+    String clientId,
+    ClientAppointment appointment,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    var saved = appointment.copyWith(
+      workshopId: workshopId,
+      clientId: clientId,
+      updatedAt: DateTime.now(),
+    );
+    final cloud = _cloudClient(workshopId, clientId);
+    if (cloud != null) {
+      try {
+        final row = await cloud
+            .from('appointments')
+            .insert({
+              'workshop_id': workshopId,
+              'client_id': clientId,
+              'scheduled_at': _scheduledAt(saved).toUtc().toIso8601String(),
+              'service_type': saved.serviceType,
+              'motorcycle_name': saved.motorcycleName,
+              'service_stage': saved.serviceStage,
+              'reason': saved.notes,
+              'status': 'requested',
+            })
+            .select('id')
+            .single();
+        saved = saved.copyWith(id: row['id']?.toString());
+      } on PostgrestException catch (error) {
+        if (error.code == '23505') {
+          throw const AppointmentSlotUnavailableException();
+        }
+        throw const AppointmentPersistenceException();
+      } catch (_) {
+        throw const AppointmentPersistenceException();
+      }
+    }
+    final global = await _listGlobalAppointments(preferences);
+    final occupied = global.any(
+      (item) =>
+          !item.isCancelled &&
+          item.id != saved.id &&
+          item.workshopId == workshopId &&
+          _sameDay(item.date, saved.date) &&
+          item.time == saved.time,
+    );
+    if (occupied) throw const AppointmentSlotUnavailableException();
+
+    final items = [...await listAppointments(workshopId, clientId)];
+    items.add(saved);
+    await preferences.setString(
+      'client_appointments_${_scope(workshopId, clientId)}',
+      jsonEncode(items.map((item) => item.toMap()).toList()),
+    );
+    global.removeWhere((item) => item.id == saved.id);
+    global.add(saved);
+    await _saveGlobalAppointments(preferences, global);
+    revision.value++;
+  }
+
+  Future<bool> isSlotAvailable(
+    String workshopId,
+    DateTime date,
+    String time, {
+    String? excludingAppointmentId,
+  }) async {
+    final cloud = _cloudClient(workshopId, null);
+    if (cloud != null) {
+      try {
+        final rows = await cloud
+            .from('appointments')
+            .select('id')
+            .eq('workshop_id', workshopId)
+            .eq(
+              'scheduled_at',
+              _scheduledAtParts(date, time).toUtc().toIso8601String(),
+            )
+            .neq('status', 'cancelled')
+            .limit(1);
+        if ((rows as List).isNotEmpty) return false;
+      } catch (_) {
+        // The final insert remains the authoritative atomic conflict check.
+      }
+    }
+    final preferences = await SharedPreferences.getInstance();
+    final global = await _listGlobalAppointments(preferences);
+    return !global.any(
+      (item) =>
+          !item.isCancelled &&
+          item.id != excludingAppointmentId &&
+          item.workshopId == workshopId &&
+          _sameDay(item.date, date) &&
+          item.time == time,
+    );
+  }
+
+  Future<void> cancelAppointment(ClientAppointment appointment) async {
+    if (!appointment.canBeCancelled()) {
+      throw const AppointmentCancellationNotAllowedException();
+    }
+    final cloud = _cloudClient(appointment.workshopId, appointment.clientId);
+    if (cloud != null && _isUuid(appointment.id)) {
+      try {
+        await cloud
+            .from('appointments')
+            .update({'status': 'cancelled'})
+            .eq('id', appointment.id);
+      } on PostgrestException catch (error) {
+        if (error.code == 'P0001') {
+          throw const AppointmentCancellationNotAllowedException();
+        }
+        throw const AppointmentPersistenceException();
+      } catch (_) {
+        throw const AppointmentPersistenceException();
+      }
+    }
+    final preferences = await SharedPreferences.getInstance();
+    final updated = appointment.copyWith(
+      status: 'Cancelada',
+      serviceStage: 'Cita cancelada',
+      updatedAt: DateTime.now(),
+    );
+    final global = await _listGlobalAppointments(preferences);
+    final globalIndex = global.indexWhere((item) => item.id == appointment.id);
+    if (globalIndex >= 0) global[globalIndex] = updated;
+    await _saveGlobalAppointments(preferences, global);
+
+    final scoped = [
+      ...await listAppointments(appointment.workshopId, appointment.clientId),
+    ];
+    final scopedIndex = scoped.indexWhere((item) => item.id == appointment.id);
+    if (scopedIndex >= 0) scoped[scopedIndex] = updated;
+    await preferences.setString(
+      'client_appointments_${_scope(appointment.workshopId, appointment.clientId)}',
+      jsonEncode(scoped.map((item) => item.toMap()).toList()),
+    );
+    revision.value++;
+  }
+
+  Future<List<ClientAppointment>> listWorkshopAppointments(
+    String workshopId,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    final items = await _listGlobalAppointments(preferences);
+    return items.where((item) => item.workshopId == workshopId).toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+  }
+
+  Future<void> updateAppointmentStage(
+    ClientAppointment appointment,
+    String stage, {
+    String? mechanicName,
+  }) async {
+    if (appointment.isCancelled || !clientServiceStages.contains(stage)) return;
+    final preferences = await SharedPreferences.getInstance();
+    final updated = appointment.copyWith(
+      serviceStage: stage,
+      mechanicName: mechanicName,
+      updatedAt: DateTime.now(),
+    );
+    final global = await _listGlobalAppointments(preferences);
+    final globalIndex = global.indexWhere((item) => item.id == appointment.id);
+    if (globalIndex >= 0) global[globalIndex] = updated;
+    await _saveGlobalAppointments(preferences, global);
+
+    final scoped = [
+      ...await listAppointments(appointment.workshopId, appointment.clientId),
+    ];
+    final scopedIndex = scoped.indexWhere((item) => item.id == appointment.id);
+    if (scopedIndex >= 0) scoped[scopedIndex] = updated;
+    await preferences.setString(
+      'client_appointments_${_scope(appointment.workshopId, appointment.clientId)}',
+      jsonEncode(scoped.map((item) => item.toMap()).toList()),
+    );
+    revision.value++;
+  }
+
+  Future<void> purgeWorkshop(String workshopId) async {
+    final preferences = await SharedPreferences.getInstance();
+    final safeId = workshopId.toLowerCase().replaceAll(
+      RegExp(r'[^a-z0-9_-]'),
+      '_',
+    );
+    for (final key
+        in preferences
+            .getKeys()
+            .where(
+              (key) =>
+                  (key.startsWith('client_motorcycles_') ||
+                      key.startsWith('client_appointments_')) &&
+                  key.contains(safeId),
+            )
+            .toList()) {
+      await preferences.remove(key);
+    }
+    final global = await _listGlobalAppointments(preferences)
+      ..removeWhere((item) => item.workshopId == workshopId);
+    await _saveGlobalAppointments(preferences, global);
+    revision.value++;
+  }
+
+  Future<List<ClientAppointment>> _listGlobalAppointments(
+    SharedPreferences preferences,
+  ) async {
+    final encoded = preferences.getString(_globalAppointmentsKey);
+    if (encoded == null) return <ClientAppointment>[];
+    try {
+      return (jsonDecode(encoded) as List)
+          .whereType<Map>()
+          .map(
+            (item) =>
+                ClientAppointment.fromMap(Map<String, dynamic>.from(item)),
+          )
+          .toList();
+    } catch (_) {
+      return <ClientAppointment>[];
+    }
+  }
+
+  Future<void> _saveGlobalAppointments(
+    SharedPreferences preferences,
+    List<ClientAppointment> items,
+  ) => preferences.setString(
+    _globalAppointmentsKey,
+    jsonEncode(items.map((item) => item.toMap()).toList()),
+  );
+
+  bool _sameDay(DateTime left, DateTime right) =>
+      left.year == right.year &&
+      left.month == right.month &&
+      left.day == right.day;
+
+  DateTime _scheduledAt(ClientAppointment appointment) =>
+      _scheduledAtParts(appointment.date, appointment.time);
+
+  DateTime _scheduledAtParts(DateTime date, String time) {
+    final parts = time.split(':');
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      int.tryParse(parts.first) ?? 0,
+      parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0,
+    );
+  }
+
+  SupabaseClient? _cloudClient(String workshopId, String? clientId) {
+    if (!ApiClient.cloudEnabled || !_isUuid(workshopId)) return null;
+    try {
+      final client = ApiClient().client;
+      final userId = client.auth.currentUser?.id;
+      if (userId == null) return null;
+      if (clientId != null && _isUuid(clientId) && userId != clientId) {
+        return null;
+      }
+      return client;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _isUuid(String value) => RegExp(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+    caseSensitive: false,
+  ).hasMatch(value);
+}
