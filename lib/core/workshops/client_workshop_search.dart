@@ -15,6 +15,9 @@ List<Workshop> filterWorkshopsForClientSearch({
     return const [];
   }
   final hidden = hiddenIds.toSet();
+  final searchTerms = normalizedQuery
+      .split(RegExp(r'\s+'))
+      .where((term) => term.isNotEmpty);
   return workshops.where((workshop) {
     if (hidden.contains(workshop.id)) return false;
     if (selectedDepartment.isNotEmpty &&
@@ -25,13 +28,16 @@ List<Workshop> filterWorkshopsForClientSearch({
       return false;
     }
     if (normalizedQuery.isEmpty) return true;
-    return [
-      workshop.name,
-      workshop.department,
-      workshop.municipality,
-      workshop.neighborhood,
-      workshop.address,
-    ].any((value) => _normalize(value).contains(normalizedQuery));
+    final searchableText = _normalize(
+      [
+        workshop.name,
+        workshop.department,
+        workshop.municipality,
+        workshop.neighborhood,
+        workshop.address,
+      ].join(' '),
+    );
+    return searchTerms.every(searchableText.contains);
   }).toList();
 }
 

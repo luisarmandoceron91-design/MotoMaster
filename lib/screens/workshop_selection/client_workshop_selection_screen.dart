@@ -49,6 +49,7 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
   List<String> _historyIds = const [];
   List<String> _hiddenIds = const [];
   List<Workshop> _lastItems = const [];
+  bool _showSuggestions = true;
   bool _loadInProgress = false;
   bool _reloadQueued = false;
   Timer? _refreshTimer;
@@ -92,7 +93,7 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
     super.dispose();
   }
 
-  void _changed() => setState(() {});
+  void _changed() => setState(() => _showSuggestions = true);
   void _reload() {
     if (_loadInProgress) {
       _reloadQueued = true;
@@ -270,6 +271,9 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
     List<Workshop> items,
   ) {
     final shown = _filter(items);
+    final suggestions = _search.text.trim().isEmpty
+        ? const <Workshop>[]
+        : shown.take(5).toList();
     // The quick-access list is useful only before searching. Once the client
     // provides a location or text query, show exclusively the matching public
     // directory results; a saved workshop from another city must not appear.
@@ -301,26 +305,43 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
           style: TextStyle(color: Color(0xFFD1D2D4), fontSize: 17),
         ),
         const SizedBox(height: 26),
-        TextField(
-          controller: _search,
-          decoration: InputDecoration(
-            hintText: 'Buscar por nombre, departamento, municipio o barrio',
-            prefixIcon: const Icon(Icons.search_rounded, size: 29),
-            suffixIcon: _search.text.isEmpty
-                ? null
-                : IconButton(
-                    tooltip: 'Limpiar búsqueda',
-                    onPressed: _search.clear,
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-            filled: true,
-            fillColor: const Color(0xF2222428),
-            contentPadding: const EdgeInsets.symmetric(vertical: 20),
-            border: _inputBorder(),
-            enabledBorder: _inputBorder(),
-            focusedBorder: _inputBorder(_orange),
-          ),
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            TextField(
+              controller: _search,
+              decoration: InputDecoration(
+                hintText: 'Buscar por nombre, departamento, municipio o barrio',
+                prefixIcon: const Icon(Icons.search_rounded, size: 29),
+                suffixIcon: _search.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Limpiar búsqueda',
+                        onPressed: _search.clear,
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                filled: true,
+                fillColor: const Color(0xF2222428),
+                contentPadding: const EdgeInsets.symmetric(vertical: 20),
+                border: _inputBorder(),
+                enabledBorder: _inputBorder(),
+                focusedBorder: _inputBorder(_orange),
+              ),
+            ),
+            if (_showSuggestions && suggestions.isNotEmpty)
+              Positioned(
+                top: 64,
+                left: 0,
+                right: 0,
+                child: _WorkshopSuggestions(
+                  workshops: suggestions,
+                  onSelected: _selectSuggestion,
+                ),
+              ),
+          ],
         ),
+        if (_showSuggestions && suggestions.isNotEmpty)
+          SizedBox(height: suggestions.length * 68.0 + 12),
         const SizedBox(height: 16),
         LayoutBuilder(
           builder: (context, constraints) {
@@ -520,6 +541,18 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
     });
   }
 
+  void _selectSuggestion(Workshop workshop) {
+    _search.value = TextEditingValue(
+      text: workshop.name,
+      selection: TextSelection.collapsed(offset: workshop.name.length),
+    );
+    _municipalitySearch.text = workshop.municipality;
+    setState(() {
+      _department = workshop.department;
+      _showSuggestions = false;
+    });
+  }
+
   Future<void> _pick({
     required String title,
     required List<String> values,
@@ -614,6 +647,60 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
       // remote state without putting the workshop back on screen.
     }
   }
+}
+
+class _WorkshopSuggestions extends StatelessWidget {
+  const _WorkshopSuggestions({
+    required this.workshops,
+    required this.onSelected,
+  });
+
+  final List<Workshop> workshops;
+  final ValueChanged<Workshop> onSelected;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    child: Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF202328),
+        border: Border.all(color: const Color(0xFF55595F)),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x99000000),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var index = 0; index < workshops.length; index++) ...[
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.storefront_outlined, color: _orange),
+              title: Text(
+                workshops[index].name,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              subtitle: Text(
+                '${workshops[index].municipality}, ${workshops[index].department}'
+                '${workshops[index].neighborhood.isEmpty ? '' : ' · ${workshops[index].neighborhood}'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: const Icon(Icons.north_west_rounded, size: 18),
+              onTap: () => onSelected(workshops[index]),
+            ),
+            if (index != workshops.length - 1)
+              const Divider(height: 1, color: Color(0xFF3B3E43)),
+          ],
+        ],
+      ),
+    ),
+  );
 }
 
 class _FilterButton extends StatelessWidget {

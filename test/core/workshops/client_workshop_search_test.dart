@@ -72,4 +72,14 @@ void main() {
     );
     expect(result.map((workshop) => workshop.id), ['elite']);
   });
+
+  test('combina nombre y ubicación escrita en una sola búsqueda', () {
+    final result = filterWorkshopsForClientSearch(
+      workshops: workshops,
+      department: null,
+      municipality: '',
+      query: 'motos jose popayan cauca',
+    );
+    expect(result.map((workshop) => workshop.id), ['jose']);
+  });
 }
