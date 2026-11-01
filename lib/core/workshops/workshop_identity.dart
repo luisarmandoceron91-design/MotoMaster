@@ -37,7 +37,12 @@ List<Workshop> canonicalWorkshops(
 }) {
   final byIdentity = <String, Workshop>{};
   for (final workshop in workshops) {
-    final key = workshopIdentityKey(workshop);
+    // A workshop name is not unique: different administrators can register
+    // businesses with the same commercial name in different municipalities.
+    // Only records for the same persistent ID represent the same workshop.
+    final key = workshop.id.trim().isEmpty
+        ? workshopIdentityKey(workshop)
+        : workshop.id;
     if (key.isEmpty) continue;
     final current = byIdentity[key];
     if (current == null) {

@@ -23,32 +23,31 @@ void main() {
     municipality: municipality,
   );
 
-  test('combina el mismo taller aunque cambien mayusculas y tildes', () {
+  test('conserva talleres diferentes aunque compartan el mismo nombre', () {
     final result = canonicalWorkshops([
       workshop(id: 'old', name: 'Motos Ordóñez'),
       workshop(id: 'new', name: 'MOTOS ORDOÑEZ', municipality: 'La Cruz'),
     ]);
 
-    expect(result, hasLength(1));
-    expect(result.single.id, 'new');
+    expect(result.map((item) => item.id), unorderedEquals(['new', 'old']));
   });
 
-  test('prefiere el registro con acceso visible para el cliente', () {
+  test('combina copias del mismo taller y prefiere el registro visible', () {
     final result = canonicalWorkshops([
       workshop(
-        id: 'expired',
+        id: 'same',
         name: 'Tu Taller',
         accessStatus: 'expired',
         permanentAccess: false,
       ),
-      workshop(id: 'active', name: 'TU TALLER'),
+      workshop(id: 'same', name: 'TU TALLER'),
     ]);
 
     expect(result, hasLength(1));
-    expect(result.single.id, 'active');
+    expect(result.single.accessStatus, 'active');
   });
 
-  test('respeta el taller previamente elegido si ambos estan activos', () {
+  test('mantiene cada registro elegido aunque coincida su nombre', () {
     final result = canonicalWorkshops(
       [
         workshop(id: 'first', name: 'Moto SolarTe', municipality: 'Pasto'),
@@ -57,6 +56,6 @@ void main() {
       preferredIds: {'chosen'},
     );
 
-    expect(result.single.id, 'chosen');
+    expect(result.map((item) => item.id), unorderedEquals(['first', 'chosen']));
   });
 }
