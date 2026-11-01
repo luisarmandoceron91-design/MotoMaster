@@ -270,11 +270,16 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
     List<Workshop> items,
   ) {
     final shown = _filter(items);
-    final remembered = _historyIds
-        .map((id) => items.where((item) => item.id == id).firstOrNull)
-        .whereType<Workshop>()
-        .where((item) => !_hiddenIds.contains(item.id))
-        .toList();
+    // The quick-access list is useful only before searching. Once the client
+    // provides a location or text query, show exclusively the matching public
+    // directory results; a saved workshop from another city must not appear.
+    final remembered = _searchReady
+        ? const <Workshop>[]
+        : _historyIds
+              .map((id) => items.where((item) => item.id == id).firstOrNull)
+              .whereType<Workshop>()
+              .where((item) => !_hiddenIds.contains(item.id))
+              .toList();
     final registered = shown
         .where((item) => !remembered.any((saved) => saved.id == item.id))
         .toList();
