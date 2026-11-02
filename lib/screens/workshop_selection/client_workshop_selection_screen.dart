@@ -121,14 +121,13 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
     final results = await Future.wait([
       _repository.listActive(),
       _history.list(widget.profile.email),
-      _repository.listJoinedIds(),
       _history.listHidden(widget.profile.email),
     ]);
-    _historyIds = {
-      ...(results[1] as List<String>),
-      ...(results[2] as List<String>),
-    }.toList();
-    _hiddenIds = results[3] as List<String>;
+    // Only keep workshops selected explicitly by this client in this app.
+    // Cloud links created by older versions must not surface as if the client
+    // had searched for them.
+    _historyIds = results[1] as List<String>;
+    _hiddenIds = results[2] as List<String>;
     final workshops = _uniqueWorkshops(results[0] as List<Workshop>);
     _lastItems = workshops;
     return workshops;

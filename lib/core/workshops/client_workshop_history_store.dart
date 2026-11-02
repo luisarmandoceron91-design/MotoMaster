@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ClientWorkshopHistoryStore {
-  static const _key = 'client_workshop_history_v1';
+  // Version 2 deliberately starts an explicit client history. Version 1
+  // could contain legacy entries created before a client selected a workshop.
+  static const _key = 'client_workshop_history_v2';
   static const _hiddenKey = 'client_workshop_hidden_v1';
 
   String _email(String value) => value.trim().toLowerCase();
