@@ -345,7 +345,7 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
         LayoutBuilder(
           builder: (context, constraints) {
             final filtersWidth = constraints.maxWidth >= 760
-                ? 660.0
+                ? 560.0
                 : constraints.maxWidth;
             return Wrap(
               spacing: 12,
@@ -355,28 +355,7 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
                   width: filtersWidth,
                   child: Row(
                     children: [
-                      SizedBox(
-                        width: 96,
-                        height: 50,
-                        child: OutlinedButton(
-                          onPressed: _clearFilters,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            backgroundColor: const Color(0xEF222428),
-                            side: const BorderSide(color: Color(0xFF4B4E53)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: const Text(
-                            'Todos',
-                            style: TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
                       Expanded(
-                        flex: 5,
                         child: _FilterButton(
                           width: double.infinity,
                           label: _department ?? 'Departamento',
@@ -395,7 +374,6 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        flex: 5,
                         child: SizedBox(
                           height: 50,
                           child: TextField(

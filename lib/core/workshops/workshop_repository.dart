@@ -51,9 +51,11 @@ class WorkshopRepository {
         // The owner's latest local decision must win over a stale cloud copy.
         for (final item in localItems) item.id: item,
       };
-      return canonicalWorkshops(
-        merged.values.where((item) => item.hasPlatformAccess),
-      );
+      // The client directory is based on registered, non-deleted workshops
+      // returned by list_active_workshops. A workshop must remain searchable
+      // by its department and municipality even if its subscription state is
+      // pending or its trial has finished.
+      return canonicalWorkshops(merged.values);
     } catch (error) {
       if (_isConnectionFailure(error)) return localItems;
       rethrow;

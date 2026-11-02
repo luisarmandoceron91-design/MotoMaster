@@ -42,6 +42,15 @@ void main() {
       department: 'Nariño',
       municipality: 'San Bernardo',
     ),
+    const Workshop(
+      id: 'doncello',
+      name: 'Motos del Doncello',
+      slug: 'motos-del-doncello',
+      tagline: '',
+      accentColorValue: 0xFFFF6500,
+      department: 'Caquetá',
+      municipality: 'El Doncello',
+    ),
   ];
 
   test('no publica todos los talleres antes de elegir ubicación', () {
@@ -103,9 +112,31 @@ void main() {
     final result = filterWorkshopsForClientSearch(
       workshops: workshops,
       department: 'Caquetá',
-      municipality: 'El Doncello',
+      municipality: 'Florencia',
     );
     expect(result, isEmpty);
+  });
+
+  test(
+    'encuentra todos los talleres por municipio desde la barra principal',
+    () {
+      final result = filterWorkshopsForClientSearch(
+        workshops: workshops,
+        department: null,
+        municipality: '',
+        query: 'la cruz nariño',
+      );
+      expect(result.map((workshop) => workshop.id), ['elite', 'cruz-2']);
+    },
+  );
+
+  test('separa municipios y departamentos diferentes', () {
+    final result = filterWorkshopsForClientSearch(
+      workshops: workshops,
+      department: 'Caqueta',
+      municipality: 'El Doncello',
+    );
+    expect(result.map((workshop) => workshop.id), ['doncello']);
   });
 
   test('encuentra un taller al buscar por nombre sin filtros de ubicación', () {
