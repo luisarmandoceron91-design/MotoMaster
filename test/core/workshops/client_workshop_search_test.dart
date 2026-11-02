@@ -90,6 +90,15 @@ void main() {
     expect(result.map((workshop) => workshop.id), isNot(contains('bernardo')));
   });
 
+  test('va mostrando los talleres mientras se escribe el municipio', () {
+    final result = filterWorkshopsForClientSearch(
+      workshops: workshops,
+      department: 'Nariño',
+      municipality: 'La C',
+    );
+    expect(result.map((workshop) => workshop.id), ['elite', 'cruz-2']);
+  });
+
   test('no devuelve resultados cuando no hay talleres en la ubicación', () {
     final result = filterWorkshopsForClientSearch(
       workshops: workshops,
