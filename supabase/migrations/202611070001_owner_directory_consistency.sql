@@ -103,6 +103,40 @@ begin
 end;
 $$;
 
+-- En el centro de control, «activar» significa que el taller queda
+-- disponible para los clientes. Se conserva su información de plan, pero
+-- el directorio no puede dejarlo bloqueado por un estado de prueba anterior.
+create or replace function public.owner_set_workshop_availability(
+  target_workshop_id uuid, enabled boolean, change_reason text
+)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if not private.is_platform_owner() or not private.has_mfa() then
+    raise exception 'Se requiere una sesion de propietario con verificacion en dos pasos';
+  end if;
+  if length(trim(change_reason)) < 3 then
+    raise exception 'El motivo es obligatorio';
+  end if;
+  if enabled then
+    update public.workshops
+    set status = 'active', access_status = 'active', suspended_at = null,
+        access_note = trim(change_reason), updated_at = now()
+    where id = target_workshop_id and deleted_at is null;
+  else
+    update public.workshops
+    set status = 'suspended', access_status = 'suspended', suspended_at = now(),
+        access_note = trim(change_reason), updated_at = now()
+    where id = target_workshop_id and deleted_at is null;
+  end if;
+  if not found then raise exception 'Taller no encontrado'; end if;
+end;
+$$;
+
+-- Normaliza los talleres que el propietario ya marcó como activos.
+update public.workshops
+set access_status = 'active', updated_at = now()
+where status = 'active' and deleted_at is null and access_status <> 'active';
+
 drop function if exists public.list_active_workshops();
 create function public.list_active_workshops()
 returns table (
@@ -117,7 +151,7 @@ language sql stable security definer set search_path = '' as $$
   select w.id, w.name, w.slug, w.tagline, w.logo_path, w.logo_index,
     w.accent_color, w.status, w.department, w.municipality, w.neighborhood,
     w.address, w.phone, w.email, w.opening_hours, w.rating, w.review_count,
-    w.access_status, w.trial_ends_at, w.permanent_access
+    'active'::text, w.trial_ends_at, w.permanent_access
   from public.workshops w
   where w.status = 'active' and w.deleted_at is null
   order by w.name;
