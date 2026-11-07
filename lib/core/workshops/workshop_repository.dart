@@ -47,9 +47,11 @@ class WorkshopRepository {
       ];
       await _local.syncPublicDirectory(cloudItems);
       final merged = <String, Workshop>{
-        for (final item in cloudItems) item.id: item,
-        // The owner's latest local decision must win over a stale cloud copy.
+        // Local data remains a fallback while offline, but once the public
+        // directory is available the owner-controlled cloud status is the
+        // source of truth for every client.
         for (final item in localItems) item.id: item,
+        for (final item in cloudItems) item.id: item,
       };
       // The client directory is based on registered, non-deleted workshops
       // returned by list_active_workshops. A workshop must remain searchable
