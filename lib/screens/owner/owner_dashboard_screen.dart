@@ -3013,6 +3013,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       workshop.deletedAt = DateTime.now();
       workshop.purgeAfter = DateTime.now().add(const Duration(days: 30));
     });
+    // Reload from Supabase so the paperera shows the same persisted record
+    // after a browser refresh or when opening the section on another device.
+    await _loadCloudData(silent: true);
+    if (!mounted) return;
     _toast('${workshop.name} está en la papelera y puede recuperarse.');
   }
 

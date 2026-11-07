@@ -743,7 +743,10 @@ class _WorkshopRow extends StatelessWidget {
         final available = workshop.hasPlatformAccess;
         final scheduled = workshop.openingHours.isNotEmpty;
         final open = scheduled && workshop.isOpenNow;
-        final canEnter = available && (!scheduled || open);
+        // El horario informa si el taller atiende en este momento, pero no
+        // impide al cliente abrir su ficha, consultar productos o agendar.
+        // Todo taller activo debe poder seleccionarse desde la búsqueda.
+        final canEnter = available;
         final status = !available
             ? 'Acceso desactivado'
             : scheduled
@@ -758,39 +761,101 @@ class _WorkshopRow extends StatelessWidget {
             : const Color(0xFFFF4D45);
         final button = _EnterButton(
           loading: loading,
-          label: !available
-              ? 'No disponible'
-              : scheduled && !open
-              ? 'No disponible por horario'
-              : 'Entrar al taller',
+          label: !available ? 'No disponible' : 'Entrar al taller',
           onPressed: canEnter ? onPressed : null,
           compact: compact,
         );
-        return Container(
-          padding: EdgeInsets.all(compact ? 12 : 14),
-          decoration: BoxDecoration(
-            color: const Color(0xF51A1D21),
-            border: Border.all(
-              color: workshop.accentColor.withValues(alpha: .52),
-            ),
+        return Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          child: InkWell(
+            onTap: canEnter && !loading ? onPressed : null,
             borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: workshop.accentColor.withValues(alpha: .08),
-                blurRadius: 22,
-                offset: const Offset(0, 8),
+            child: Container(
+              padding: EdgeInsets.all(compact ? 12 : 14),
+              decoration: BoxDecoration(
+                color: const Color(0xF51A1D21),
+                border: Border.all(
+                  color: workshop.accentColor.withValues(alpha: .52),
+                ),
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: workshop.accentColor.withValues(alpha: .08),
+                    blurRadius: 22,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: compact
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              child: compact
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _Logo(workshop: workshop, size: 48),
-                        const SizedBox(width: 10),
-                        Expanded(child: _Identity(workshop: workshop)),
+                        Row(
+                          children: [
+                            _Logo(workshop: workshop, size: 48),
+                            const SizedBox(width: 10),
+                            Expanded(child: _Identity(workshop: workshop)),
+                            _WorkshopMenu(
+                              canEnter: canEnter,
+                              onEnter: onPressed,
+                              onHide: onHide,
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 16, color: Color(0xFF35383D)),
+                        if (narrow) ...[
+                          _Status(label: status, color: statusColor),
+                          const SizedBox(height: 9),
+                          _Location(workshop: workshop),
+                          const SizedBox(height: 10),
+                          SizedBox(width: double.infinity, child: button),
+                        ] else
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Expanded(child: _Location(workshop: workshop)),
+                              const SizedBox(width: 12),
+                              SizedBox(
+                                width: 180,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: _Status(
+                                        label: status,
+                                        color: statusColor,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 9),
+                                    button,
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        _Logo(workshop: workshop, size: 62),
+                        const SizedBox(width: 15),
+                        SizedBox(
+                          width: 210,
+                          child: _Identity(workshop: workshop),
+                        ),
+                        const SizedBox(width: 15),
+                        Expanded(child: _Location(workshop: workshop)),
+                        const SizedBox(width: 15),
+                        SizedBox(
+                          width: 150,
+                          child: _Status(label: status, color: statusColor),
+                        ),
+                        const SizedBox(width: 12),
+                        SizedBox(width: 184, child: button),
+                        const SizedBox(width: 4),
                         _WorkshopMenu(
                           canEnter: canEnter,
                           onEnter: onPressed,
@@ -798,62 +863,8 @@ class _WorkshopRow extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const Divider(height: 16, color: Color(0xFF35383D)),
-                    if (narrow) ...[
-                      _Status(label: status, color: statusColor),
-                      const SizedBox(height: 9),
-                      _Location(workshop: workshop),
-                      const SizedBox(height: 10),
-                      SizedBox(width: double.infinity, child: button),
-                    ] else
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Expanded(child: _Location(workshop: workshop)),
-                          const SizedBox(width: 12),
-                          SizedBox(
-                            width: 180,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: _Status(
-                                    label: status,
-                                    color: statusColor,
-                                  ),
-                                ),
-                                const SizedBox(height: 9),
-                                button,
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
-                )
-              : Row(
-                  children: [
-                    _Logo(workshop: workshop, size: 62),
-                    const SizedBox(width: 15),
-                    SizedBox(width: 210, child: _Identity(workshop: workshop)),
-                    const SizedBox(width: 15),
-                    Expanded(child: _Location(workshop: workshop)),
-                    const SizedBox(width: 15),
-                    SizedBox(
-                      width: 150,
-                      child: _Status(label: status, color: statusColor),
-                    ),
-                    const SizedBox(width: 12),
-                    SizedBox(width: 184, child: button),
-                    const SizedBox(width: 4),
-                    _WorkshopMenu(
-                      canEnter: canEnter,
-                      onEnter: onPressed,
-                      onHide: onHide,
-                    ),
-                  ],
-                ),
+            ),
+          ),
         );
       },
     );
