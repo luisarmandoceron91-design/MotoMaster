@@ -3204,46 +3204,74 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.storefront_outlined,
-                    color: widget.brand.accentColor,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
-                          'Inventario, ventas y facturación',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                          ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 720;
+                  final heading = Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.storefront_outlined,
+                        color: widget.brand.accentColor,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              'Inventario, ventas y facturación',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            SizedBox(height: 3),
+                            Text(
+                              'Controla existencias, registra ventas, pedidos y movimientos.',
+                              style: TextStyle(
+                                color: Color(0xFFBFC2C7),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ),
-                        Text(
-                          'Controla existencias, registra ventas, pedidos y movimientos.',
-                          style: TextStyle(
-                            color: Color(0xFFBFC2C7),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  FilledButton.icon(
+                      ),
+                    ],
+                  );
+                  final addProduct = FilledButton.icon(
                     onPressed: () => _addProduct(),
                     icon: const Icon(Icons.add_rounded),
                     label: const Text('Registrar producto'),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
+                  );
+                  final newSale = OutlinedButton.icon(
                     onPressed: _openPointOfSale,
                     icon: const Icon(Icons.point_of_sale_rounded),
                     label: const Text('Nueva venta'),
-                  ),
-                ],
+                  );
+                  if (compact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        heading,
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [addProduct, newSale],
+                        ),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: heading),
+                      addProduct,
+                      const SizedBox(width: 8),
+                      newSale,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 16),
               if (_loading)
@@ -3251,33 +3279,36 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
               else ...[
                 _inventorySummary(),
                 const SizedBox(height: 14),
-                SegmentedButton<int>(
-                  segments: const [
-                    ButtonSegment(
-                      value: 0,
-                      icon: Icon(Icons.inventory_2_outlined),
-                      label: Text('Inventario'),
-                    ),
-                    ButtonSegment(
-                      value: 1,
-                      icon: Icon(Icons.point_of_sale_outlined),
-                      label: Text('Ventas'),
-                    ),
-                    ButtonSegment(
-                      value: 2,
-                      icon: Icon(Icons.shopping_bag_outlined),
-                      label: Text('Pedidos web'),
-                    ),
-                    ButtonSegment(
-                      value: 3,
-                      icon: Icon(Icons.history_rounded),
-                      label: Text('Movimientos'),
-                    ),
-                  ],
-                  selected: {_section},
-                  showSelectedIcon: false,
-                  onSelectionChanged: (value) =>
-                      setState(() => _section = value.first),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SegmentedButton<int>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 0,
+                        icon: Icon(Icons.inventory_2_outlined),
+                        label: Text('Inventario'),
+                      ),
+                      ButtonSegment(
+                        value: 1,
+                        icon: Icon(Icons.point_of_sale_outlined),
+                        label: Text('Ventas'),
+                      ),
+                      ButtonSegment(
+                        value: 2,
+                        icon: Icon(Icons.shopping_bag_outlined),
+                        label: Text('Pedidos web'),
+                      ),
+                      ButtonSegment(
+                        value: 3,
+                        icon: Icon(Icons.history_rounded),
+                        label: Text('Movimientos'),
+                      ),
+                    ],
+                    selected: {_section},
+                    showSelectedIcon: false,
+                    onSelectionChanged: (value) =>
+                        setState(() => _section = value.first),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 if (_section == 0) _inventorySection(),
@@ -4159,18 +4190,6 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                       );
                       final bytes = picked?.files.single.bytes;
                       if (bytes == null) return;
-                      if (bytes.lengthInBytes > 2 * 1024 * 1024) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'La imagen debe pesar máximo 2 MB.',
-                              ),
-                            ),
-                          );
-                        }
-                        return;
-                      }
                       setDialogState(() => imageBytes = bytes);
                     },
                     child: Container(
@@ -4197,7 +4216,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                                 ),
                                 SizedBox(height: 4),
                                 Text(
-                                  'JPG, PNG o WEBP · máximo 2 MB',
+                                  'JPG, PNG o WEBP · selecciona la fotografía del producto',
                                   style: TextStyle(
                                     color: Color(0xFF969CA4),
                                     fontSize: 11,
