@@ -298,6 +298,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       password: _passwordController.text,
     )) {
       await _connectOwnerCloudSession(_passwordController.text);
+      await widget.authController.restoreOwnerProfileFromCloud();
       if (widget.authController.hasOwnerProfile) {
         _openOwnerDashboard();
       } else {
@@ -372,6 +373,11 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       final accessFuture = AdminAccessService().resolveRole();
       final workshopsFuture = WorkshopRepository().listManaged();
       final accessRole = await accessFuture;
+      if (accessRole == AdminAccessRole.platformOwner) {
+        await widget.authController.restoreOwnerProfileFromCloud();
+        if (mounted) _openOwnerDashboard();
+        return;
+      }
       if (accessRole == AdminAccessRole.workshopSuspended) {
         await AuthService().signOut();
         if (mounted) {
@@ -436,14 +442,21 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     try {
       if (auth.isAuthenticated) {
         final role = await AdminAccessService().resolveRole();
-        if (role == AdminAccessRole.platformOwner) return;
+        if (role == AdminAccessRole.platformOwner) {
+          await widget.authController.restoreOwnerProfileFromCloud();
+          return;
+        }
         await auth.signOut();
       }
       final ownerEmail = widget.authController.email.trim();
       if (ownerEmail.isEmpty) return;
       await auth.signIn(email: ownerEmail, password: password);
       final role = await AdminAccessService().resolveRole();
-      if (role != AdminAccessRole.platformOwner) await auth.signOut();
+      if (role != AdminAccessRole.platformOwner) {
+        await auth.signOut();
+      } else {
+        await widget.authController.restoreOwnerProfileFromCloud();
+      }
     } catch (_) {
       if (auth.isAuthenticated) await auth.signOut();
     }
@@ -625,6 +638,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     try {
       final accessRole = await AdminAccessService().resolveRole();
       if (accessRole == AdminAccessRole.platformOwner) {
+        await widget.authController.restoreOwnerProfileFromCloud();
         _openOwnerDashboard();
         return;
       }

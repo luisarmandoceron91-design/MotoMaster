@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../networking/api_client.dart';
 import '../security/password_kdf.dart';
 
 class AdminAuthController extends ChangeNotifier {
@@ -129,6 +131,47 @@ class AdminAuthController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Recupera el perfil del propietario desde Supabase cuando existe una
+  /// sesión autenticada, sin depender del navegador donde se creó.
+  Future<bool> restoreOwnerProfileFromCloud() async {
+    if (!ApiClient.cloudEnabled || !ApiClient().isInitialized) return false;
+    final client = ApiClient().client;
+    final user = client.auth.currentUser;
+    if (user == null) return false;
+
+    try {
+      final profile = await client
+          .from('profiles')
+          .select('full_name, email, phone')
+          .eq('user_id', user.id)
+          .maybeSingle();
+      if (profile == null) return false;
+
+      final fullName = profile['full_name']?.toString().trim() ?? '';
+      final email = profile['email']?.toString().trim().toLowerCase() ?? '';
+      final phone = profile['phone']?.toString().trim() ?? '';
+      if (fullName.length < 3 ||
+          !email.contains('@') ||
+          phone.replaceAll(RegExp(r'\D'), '').length < 7) {
+        return false;
+      }
+
+      _fullName = fullName;
+      _email = email;
+      _phone = phone;
+      final preferences = await SharedPreferences.getInstance();
+      await Future.wait([
+        preferences.setString(_fullNameKey, _fullName),
+        preferences.setString(_emailKey, _email),
+        preferences.setString(_phoneKey, _phone),
+      ]);
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<String?> changeCredentials({
     required String currentPassword,
     required String newUsername,
@@ -195,8 +238,54 @@ class AdminAuthController extends ChangeNotifier {
     _document = document.trim();
     _email = normalizedEmail;
     _phone = normalizedPhone;
+    final cloudError = await _saveOwnerProfileToCloud(
+      fullName: normalizedName,
+      email: normalizedEmail,
+      phone: normalizedPhone,
+    );
     notifyListeners();
-    return null;
+    return cloudError;
+  }
+
+  Future<String?> _saveOwnerProfileToCloud({
+    required String fullName,
+    required String email,
+    required String phone,
+  }) async {
+    if (!ApiClient.cloudEnabled || !ApiClient().isInitialized) return null;
+    final client = ApiClient().client;
+    final user = client.auth.currentUser;
+    if (user == null) {
+      return 'El perfil se guardó en este equipo, pero falta iniciar sesión '
+          'con el correo del propietario para sincronizarlo en la nube.';
+    }
+    try {
+      final existing = await client
+          .from('profiles')
+          .select('department, city')
+          .eq('user_id', user.id)
+          .maybeSingle();
+      final metadata = user.userMetadata ?? const <String, dynamic>{};
+      await client.from('profiles').upsert({
+        'user_id': user.id,
+        'full_name': fullName,
+        'email': email,
+        'phone': phone,
+        'department':
+            existing?['department']?.toString() ??
+            metadata['department']?.toString() ??
+            '',
+        'city':
+            existing?['city']?.toString() ?? metadata['city']?.toString() ?? '',
+      }, onConflict: 'user_id');
+      return null;
+    } on PostgrestException {
+      return 'No fue posible sincronizar el perfil con la base de datos. '
+          'Verifica que hayas iniciado sesión con la cuenta del propietario.';
+    } catch (_) {
+      return 'No fue posible sincronizar el perfil con la base de datos. '
+          'Revisa tu conexión e inténtalo de nuevo.';
+    }
   }
 
   Future<String?> saveOwnerPresentation({

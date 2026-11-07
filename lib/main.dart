@@ -19,6 +19,7 @@ Future<void> main() async {
   await tenantContext.load();
   await brandController.load(tenantContext.currentTenantId);
   await authController.load();
+  await authController.restoreOwnerProfileFromCloud();
 
   runApp(
     MotoMasterApp(

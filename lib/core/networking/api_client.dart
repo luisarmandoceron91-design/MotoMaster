@@ -19,6 +19,8 @@ class ApiClient {
 
   bool _initialized = false;
 
+  bool get isInitialized => _initialized;
+
   /// Cloud access is explicit so local development never waits for a dead
   /// endpoint before continuing.
   static const bool cloudEnabled = bool.fromEnvironment(
