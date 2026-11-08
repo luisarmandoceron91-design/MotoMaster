@@ -13,6 +13,7 @@ where access_status = 'trial'
 -- consultan la misma información. La imagen se conserva junto al producto
 -- para que se vea igual desde cualquier dispositivo.
 alter table public.products
+  add column if not exists category text not null default 'Otros',
   add column if not exists brand text not null default '',
   add column if not exists barcode text not null default '',
   add column if not exists image_base64 text;
