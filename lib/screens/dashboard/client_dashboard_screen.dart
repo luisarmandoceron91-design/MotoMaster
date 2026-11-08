@@ -1,14 +1,14 @@
-import 'dart:typed_data';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:printing/printing.dart';
 
 import '../../core/auth/admin_auth_controller.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/branding/workshop_brand.dart';
 import '../../core/chat/chat_repository.dart';
+import '../../core/chat/chat_attachment_actions.dart';
 import '../../core/chat/local_chat_store.dart';
 import '../../core/client/client_profile.dart';
 import '../../core/client/client_profile_repository.dart';
@@ -1795,20 +1795,52 @@ class _RemoteChatEntry extends StatelessWidget {
                             child: Center(child: CircularProgressIndicator()),
                           );
                         }
-                        return ClipRRect(
+                        return InkWell(
                           borderRadius: BorderRadius.circular(5),
-                          child: Image.network(
-                            url,
-                            width: 280,
-                            height: 155,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) =>
-                                _AttachmentLabel(fileName: fileName),
+                          onTap: () => ChatAttachmentActions.openImage(
+                            context,
+                            url: url,
+                            fileName: fileName,
+                          ),
+                          child: Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(5),
+                                child: Image.network(
+                                  url,
+                                  width: 280,
+                                  height: 155,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, _, _) =>
+                                      _AttachmentLabel(fileName: fileName),
+                                ),
+                              ),
+                              const Positioned(
+                                right: 6,
+                                bottom: 6,
+                                child: Icon(
+                                  Icons.fullscreen_rounded,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
                           ),
                         );
                       },
                     )
-                  : _AttachmentLabel(fileName: fileName),
+                  : FutureBuilder<String>(
+                      future: repository.signedAttachmentUrl(attachmentPath),
+                      builder: (context, snapshot) => InkWell(
+                        onTap: snapshot.hasData
+                            ? () => ChatAttachmentActions.download(
+                                context,
+                                url: snapshot.data!,
+                                fileName: fileName,
+                              )
+                            : null,
+                        child: _AttachmentLabel(fileName: fileName),
+                      ),
+                    ),
             ),
           ),
         if (body.isNotEmpty) _Bubble(text: body, own: own),
@@ -2734,20 +2766,30 @@ class _Bubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Align(
     alignment: own ? Alignment.centerRight : Alignment.centerLeft,
-    child: Container(
-      constraints: const BoxConstraints(maxWidth: 520),
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: own
-            ? Theme.of(context).colorScheme.primary
-            : const Color(0xFF1C1E21),
-        borderRadius: BorderRadius.circular(8),
-        border: own ? null : Border.all(color: const Color(0xFF363940)),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(color: own ? Colors.black : Colors.white),
+    child: GestureDetector(
+      onLongPress: () async {
+        await Clipboard.setData(ClipboardData(text: text));
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Mensaje copiado.')));
+        }
+      },
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 520),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: own
+              ? Theme.of(context).colorScheme.primary
+              : const Color(0xFF1C1E21),
+          borderRadius: BorderRadius.circular(8),
+          border: own ? null : Border.all(color: const Color(0xFF363940)),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(color: own ? Colors.black : Colors.white),
+        ),
       ),
     ),
   );

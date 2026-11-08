@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:printing/printing.dart';
 
@@ -11,6 +11,7 @@ import '../../core/auth/admin_auth_controller.dart';
 import '../../core/branding/workshop_brand.dart';
 import '../../core/branding/workshop_dashboard_preferences.dart';
 import '../../core/chat/chat_repository.dart';
+import '../../core/chat/chat_attachment_actions.dart';
 import '../../core/chat/local_chat_store.dart';
 import '../../core/client/client_service_store.dart';
 import '../../core/commerce/commerce_models.dart';
@@ -2444,13 +2445,10 @@ class _WorkshopChatPanel extends StatelessWidget {
                                   : const Color(0xFF292C31),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Text(
-                              message['body']?.toString().isNotEmpty == true
-                                  ? message['body'].toString()
-                                  : 'Archivo adjunto',
-                              style: TextStyle(
-                                color: mine ? Colors.black : Colors.white,
-                              ),
+                            child: _AdminCloudMessage(
+                              message: message,
+                              repository: repository,
+                              own: mine,
                             ),
                           ),
                         );
@@ -2606,6 +2604,98 @@ String _adminMimeType(String fileName, {required bool image}) {
   if (lower.endsWith('.png')) return 'image/png';
   if (lower.endsWith('.webp')) return 'image/webp';
   return 'image/jpeg';
+}
+
+class _AdminCloudMessage extends StatelessWidget {
+  const _AdminCloudMessage({
+    required this.message,
+    required this.repository,
+    required this.own,
+  });
+
+  final Map<String, dynamic> message;
+  final ChatRepository repository;
+  final bool own;
+
+  @override
+  Widget build(BuildContext context) {
+    final body = message['body']?.toString().trim() ?? '';
+    final path = message['attachment_path']?.toString() ?? '';
+    final fileName = path.split('/').last.replaceFirst(RegExp(r'^\d+_'), '');
+    final isImage = RegExp(
+      r'\.(jpe?g|png|webp|gif)$',
+      caseSensitive: false,
+    ).hasMatch(fileName);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (path.isNotEmpty)
+          FutureBuilder<String>(
+            future: repository.signedAttachmentUrl(path),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const SizedBox(
+                  width: 220,
+                  height: 110,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final url = snapshot.data!;
+              return InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => isImage
+                    ? ChatAttachmentActions.openImage(
+                        context,
+                        url: url,
+                        fileName: fileName,
+                      )
+                    : ChatAttachmentActions.download(
+                        context,
+                        url: url,
+                        fileName: fileName,
+                      ),
+                child: isImage
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          url,
+                          width: 220,
+                          height: 130,
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.download_for_offline_outlined),
+                          const SizedBox(width: 8),
+                          Flexible(child: Text(fileName)),
+                        ],
+                      ),
+              );
+            },
+          ),
+        if (body.isNotEmpty) ...[
+          if (path.isNotEmpty) const SizedBox(height: 8),
+          GestureDetector(
+            onLongPress: () async {
+              await Clipboard.setData(ClipboardData(text: body));
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Mensaje copiado.')),
+                );
+              }
+            },
+            child: Text(
+              body,
+              style: TextStyle(color: own ? Colors.black : Colors.white),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 }
 
 class _WorkshopClientsPanel extends StatefulWidget {
@@ -3099,32 +3189,52 @@ class _WorkshopClientsPanelState extends State<_WorkshopClientsPanel> {
                         child: Center(child: CircularProgressIndicator()),
                       );
                     }
-                    return ClipRRect(
+                    return InkWell(
                       borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        snapshot.data!,
-                        width: 240,
-                        height: 140,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Text('No fue posible cargar la imagen.'),
+                      onTap: () => ChatAttachmentActions.openImage(
+                        context,
+                        url: snapshot.data!,
+                        fileName: fileName,
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          snapshot.data!,
+                          width: 240,
+                          height: 140,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Text('No fue posible cargar la imagen.'),
+                          ),
                         ),
                       ),
                     );
                   },
                 )
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.description_outlined),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        fileName.isEmpty ? 'Archivo adjunto' : fileName,
-                      ),
+              : FutureBuilder<String>(
+                  future: repository.signedAttachmentUrl(path),
+                  builder: (context, snapshot) => InkWell(
+                    onTap: snapshot.hasData
+                        ? () => ChatAttachmentActions.download(
+                            context,
+                            url: snapshot.data!,
+                            fileName: fileName,
+                          )
+                        : null,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.download_for_offline_outlined),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            fileName.isEmpty ? 'Archivo adjunto' : fileName,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
         if (body.isNotEmpty) ...[
           if (path.isNotEmpty) const SizedBox(height: 8),
