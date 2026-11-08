@@ -250,6 +250,8 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
     controller: controller,
     keyboardType: keyboardType,
     obscureText: obscureText,
+    // No reutilizar claves guardadas automáticamente en pantallas de acceso.
+    autofillHints: obscureText ? const <String>[] : const [AutofillHints.username],
     validator: validator,
     decoration: InputDecoration(
       labelText: label,

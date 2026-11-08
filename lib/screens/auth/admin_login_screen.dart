@@ -724,6 +724,9 @@ class _LoginField extends StatelessWidget {
   Widget build(BuildContext context) => TextFormField(
     controller: controller,
     obscureText: obscureText,
+    // Evita que el navegador inserte una clave recordada. La contraseña
+    // siempre debe comenzar vacía y ser escrita por la persona que ingresa.
+    autofillHints: obscureText ? const <String>[] : const [AutofillHints.username],
     keyboardType: keyboardType,
     textInputAction: textInputAction,
     autocorrect: false,

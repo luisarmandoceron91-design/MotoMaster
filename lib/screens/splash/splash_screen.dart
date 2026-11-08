@@ -186,7 +186,8 @@ class _SplashScreenState extends State<SplashScreen>
         fit: StackFit.expand,
         children: [
           Image.asset(
-            'assets/images/owner_service_bays_background_v1.png',
+            // Fondo original del taller con las motos al iniciar la app.
+            'assets/images/moto_master_splash_aprobada_v1.png',
             fit: BoxFit.cover,
           ),
           const ColoredBox(color: Color(0xB3050709)),
