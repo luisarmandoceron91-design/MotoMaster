@@ -2,14 +2,19 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../../core/auth/admin_auth_controller.dart';
+import '../../core/auth/admin_access_service.dart';
 import '../../core/auth/admin_oauth_intent_store.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/branding/workshop_brand.dart';
 import '../../core/tenant/tenant_context.dart';
+import '../../core/client/client_profile_repository.dart';
+import '../dashboard/admin_dashboard_screen.dart';
+import '../owner/owner_dashboard_screen.dart';
 import '../access/role_access_screen.dart';
 import '../auth/admin_login_screen.dart';
 import '../auth/client_login_screen.dart';
 import '../auth/new_password_screen.dart';
+import '../workshop_selection/client_workshop_selection_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({
@@ -104,6 +109,62 @@ class _SplashScreenState extends State<SplashScreen>
         ),
       );
       return;
+    }
+
+    // Una recarga del navegador no debe obligar a autenticarse de nuevo.
+    // Supabase conserva la sesión hasta que el usuario use Cerrar sesión.
+    if (AuthService().isAuthenticated) {
+      try {
+        final role = await AdminAccessService().resolveRole();
+        if (!mounted) return;
+        if (role == AdminAccessRole.platformOwner) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute<void>(
+              builder: (_) => OwnerDashboardScreen(
+                authController: widget.authController,
+                tenantContext: widget.tenantContext,
+                brandController: widget.brandController,
+              ),
+            ),
+          );
+          return;
+        }
+        if ((role == AdminAccessRole.workshopOwner ||
+                role == AdminAccessRole.workshopStaff) &&
+            widget.tenantContext.currentTenantId.isNotEmpty) {
+          final user = AuthService().currentUser;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute<void>(
+              builder: (_) => AdminDashboardScreen(
+                brandController: widget.brandController,
+                tenantContext: widget.tenantContext,
+                userName: user?.userMetadata?['full_name']?.toString() ??
+                    user?.email ??
+                    'Administrador',
+              ),
+            ),
+          );
+          return;
+        }
+        final client = await ClientProfileRepository().getCurrentProfile();
+        if (!mounted) return;
+        if (client != null) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute<void>(
+              builder: (_) => ClientWorkshopSelectionScreen(
+                profile: client,
+                tenantContext: widget.tenantContext,
+                brandController: widget.brandController,
+                authController: widget.authController,
+              ),
+            ),
+          );
+          return;
+        }
+      } catch (_) {
+        // Si la red está temporalmente caída, la pantalla de acceso conserva
+        // las sesiones locales y permite reintentar sin borrar datos.
+      }
     }
 
     Navigator.of(

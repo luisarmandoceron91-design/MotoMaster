@@ -515,7 +515,7 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
               tooltip: 'Cuenta del administrador',
               icon: const Icon(Icons.account_circle_outlined),
               onSelected: (value) {
-                if (value == 'logout') widget.onLogout();
+                if (value == 'logout') _confirmLogout();
                 if (value == 'settings') _openAccessSettings();
               },
               itemBuilder: (_) => const [
@@ -600,6 +600,30 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmLogout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.logout_rounded),
+        title: const Text('¿Cerrar sesión?'),
+        content: const Text(
+          'Podrás volver a entrar con tu usuario y contraseña. Los datos del taller permanecerán guardados.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Cerrar sesión'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) widget.onLogout();
   }
 
   Widget _selectedPage() {

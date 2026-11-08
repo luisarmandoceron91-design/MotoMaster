@@ -2796,7 +2796,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
             onSelected: (value) {
               if (value == 'profile') _openSettings();
               if (value == 'recovery') _openRecovery();
-              if (value == 'logout') _signOut();
+              if (value == 'logout') _confirmSignOut();
             },
             itemBuilder: (_) => const [
               PopupMenuItem(
@@ -4379,6 +4379,30 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.logout_rounded),
+        title: const Text('¿Cerrar sesión?'),
+        content: const Text(
+          'Tendrás que iniciar sesión de nuevo para ver tus talleres, pedidos y datos personales.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Cerrar sesión'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await _signOut();
   }
 
   Future<void> _signOut() async {
