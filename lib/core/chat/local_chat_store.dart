@@ -165,10 +165,17 @@ class LocalChatStore {
           message.workshopId == workshopId &&
           _email(message.clientEmail) == email,
     );
-    final hasAutomaticGreeting = conversation.any(
-      (message) => message.sender == 'automatic',
-    );
     final now = DateTime.now();
+    final latest = conversation.isEmpty
+        ? null
+        : conversation.reduce(
+            (current, next) =>
+                current.createdAt.isAfter(next.createdAt) ? current : next,
+          );
+    // Saluda solo en la primera interacción o si pasaron 24 horas completas.
+    final needsAutomaticGreeting =
+        latest == null ||
+        now.difference(latest.createdAt) >= const Duration(days: 1);
     messages.add(
       LocalChatMessage(
         id: 'client-${now.microsecondsSinceEpoch}',
@@ -181,7 +188,7 @@ class LocalChatStore {
         createdAt: now,
       ),
     );
-    if (!hasAutomaticGreeting) {
+    if (needsAutomaticGreeting) {
       messages.add(
         LocalChatMessage(
           id: 'automatic-${now.microsecondsSinceEpoch}',

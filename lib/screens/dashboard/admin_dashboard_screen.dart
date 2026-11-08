@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 
 import '../../core/auth/admin_access_service.dart';
+import '../../core/auth/admin_auth_controller.dart';
 import '../../core/branding/workshop_brand.dart';
 import '../../core/branding/workshop_dashboard_preferences.dart';
 import '../../core/chat/chat_repository.dart';
@@ -24,6 +25,7 @@ import '../../core/workshops/workshop_clients_service.dart';
 import '../../core/workshops/workshop_feedback_store.dart';
 import '../admin_customization/admin_customization_screen.dart';
 import '../settings/credential_settings_screen.dart';
+import '../access/role_access_screen.dart';
 
 /// Panel administrativo asociado al taller activo de la sesión.
 class AdminDashboardScreen extends StatelessWidget {
@@ -89,7 +91,16 @@ class AdminDashboardScreen extends StatelessWidget {
     await tenantContext.clear();
     brandController.value = WorkshopBrand.defaultBrand;
     if (!context.mounted) return;
-    Navigator.of(context).popUntil((route) => route.isFirst);
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(
+        builder: (_) => RoleAccessScreen(
+          tenantContext: tenantContext,
+          brandController: brandController,
+          authController: AdminAuthController(),
+        ),
+      ),
+      (_) => false,
+    );
   }
 }
 
@@ -4156,7 +4167,10 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
     CommerceProduct? current,
     String initialBarcode = '',
   ]) async {
-    Uint8List? imageBytes = current?.imageBytes;
+    var productImages = current?.photos.toList() ?? <Uint8List>[];
+    Uint8List? imageBytes = productImages.isNotEmpty
+        ? productImages.first
+        : current?.imageBytes;
     final name = TextEditingController(text: current?.name ?? '');
     final brand = TextEditingController(text: current?.brand ?? '');
     final barcode = TextEditingController(
@@ -4209,12 +4223,21 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                     onTap: () async {
                       final picked = await FilePicker.platform.pickFiles(
                         type: FileType.image,
-                        allowMultiple: false,
+                        allowMultiple: true,
                         withData: true,
                       );
-                      final bytes = picked?.files.single.bytes;
-                      if (bytes == null) return;
-                      setDialogState(() => imageBytes = bytes);
+                      final photos =
+                          picked?.files
+                              .map((file) => file.bytes)
+                              .whereType<Uint8List>()
+                              .take(4)
+                              .toList() ??
+                          const <Uint8List>[];
+                      if (photos.isEmpty) return;
+                      setDialogState(() {
+                        productImages = photos;
+                        imageBytes = photos.first;
+                      });
                     },
                     child: Container(
                       width: double.infinity,
@@ -4235,7 +4258,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                                 Icon(Icons.upload_rounded, size: 38),
                                 SizedBox(height: 8),
                                 Text(
-                                  'Subir imagen del repuesto',
+                                  'Subir hasta 4 fotos del repuesto',
                                   style: TextStyle(fontWeight: FontWeight.w800),
                                 ),
                                 SizedBox(height: 4),
@@ -4263,8 +4286,10 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                                   top: 10,
                                   child: IconButton.filled(
                                     tooltip: 'Quitar imagen',
-                                    onPressed: () =>
-                                        setDialogState(() => imageBytes = null),
+                                    onPressed: () => setDialogState(() {
+                                      imageBytes = null;
+                                      productImages = <Uint8List>[];
+                                    }),
                                     style: IconButton.styleFrom(
                                       backgroundColor: const Color(0xDD111317),
                                     ),
@@ -4432,9 +4457,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
         } else {
           await _store.saveProduct(
             CommerceProduct(
-              id:
-                  current?.id ??
-                  CommerceStore.newProductId(),
+              id: current?.id ?? CommerceStore.newProductId(),
               workshopId: widget.workshopId,
               name: productName,
               brand: productBrand,
@@ -4453,6 +4476,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
               active: visibleForClients,
               imagePath: current?.imagePath,
               imageBytes: imageBytes,
+              imageGallery: productImages,
             ),
             movementReason: current == null
                 ? 'Registro inicial del producto'

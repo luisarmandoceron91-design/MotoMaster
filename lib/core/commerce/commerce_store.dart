@@ -23,7 +23,9 @@ class CommerceStore {
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    final hex = bytes.map((value) => value.toRadixString(16).padLeft(2, '0')).join();
+    final hex = bytes
+        .map((value) => value.toRadixString(16).padLeft(2, '0'))
+        .join();
     return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
   }
 
@@ -173,6 +175,7 @@ class CommerceStore {
     active: row['is_active'] as bool? ?? true,
     imagePath: row['image_path']?.toString(),
     imageBytes: _decodeCloudImage(row['image_base64']),
+    imageGallery: _decodeCloudGallery(row['image_gallery_base64']),
   );
 
   Map<String, dynamic> _cloudPayload(CommerceProduct product) => {
@@ -188,8 +191,16 @@ class CommerceStore {
     'sku': product.sku,
     'is_active': product.active,
     'image_path': product.imagePath,
-    'image_base64': product.imageBytes == null ? null : base64Encode(product.imageBytes!),
+    'image_base64': product.imageBytes == null
+        ? null
+        : base64Encode(product.imageBytes!),
+    'image_gallery_base64': product.photos.map(base64Encode).toList(),
   };
+
+  List<Uint8List> _decodeCloudGallery(dynamic value) {
+    if (value is! List) return const [];
+    return value.map(_decodeCloudImage).whereType<Uint8List>().take(4).toList();
+  }
 
   Uint8List? _decodeCloudImage(dynamic value) {
     if (value == null || value.toString().isEmpty) return null;

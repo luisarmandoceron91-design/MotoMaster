@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 
@@ -21,6 +22,7 @@ import '../../core/networking/api_client.dart';
 import '../../core/staff/workshop_mechanic_store.dart';
 import '../../core/tenant/tenant_context.dart';
 import '../../core/workshops/workshop.dart';
+import '../access/role_access_screen.dart';
 import '../../core/workshops/workshop_feedback_store.dart';
 import '../auth/account_recovery_screen.dart';
 import '../auth/client_registration/client_registration_screen.dart';
@@ -459,11 +461,13 @@ class _PartsPage extends StatefulWidget {
     required this.workshop,
     required this.clientId,
     required this.clientName,
+    required this.onOpenSupport,
   });
   final Color accent;
   final Workshop workshop;
   final String clientId;
   final String clientName;
+  final VoidCallback onOpenSupport;
 
   @override
   State<_PartsPage> createState() => _PartsPageState();
@@ -621,6 +625,50 @@ class _PartsPageState extends State<_PartsPage> {
               ),
             ),
           ),
+          if (query.isNotEmpty && visible.isNotEmpty)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 680),
+              child: Container(
+                margin: const EdgeInsets.only(top: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF20252B),
+                  border: Border.all(color: const Color(0xFF414850)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    for (final suggestion in visible.take(5))
+                      ListTile(
+                        dense: true,
+                        leading: Icon(
+                          _productIcon(suggestion.category),
+                          color: widget.accent,
+                        ),
+                        title: Text(
+                          suggestion.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          suggestion.brand.isEmpty
+                              ? suggestion.category
+                              : '${suggestion.brand} · ${suggestion.category}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Text(
+                          commerceMoney(suggestion.priceCents),
+                          style: TextStyle(
+                            color: widget.accent,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        onTap: () => _showProductDetails(suggestion),
+                      ),
+                  ],
+                ),
+              ),
+            ),
           const SizedBox(height: 14),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -718,7 +766,7 @@ class _PartsPageState extends State<_PartsPage> {
                     ),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(8),
-                      onTap: part.available ? () => _checkout(part) : null,
+                      onTap: () => _showProductDetails(part),
                       child: Padding(
                         padding: const EdgeInsets.all(14),
                         child: Column(
@@ -831,6 +879,117 @@ class _PartsPageState extends State<_PartsPage> {
     'Aceites y filtros' || 'Filtros' => Icons.oil_barrel_outlined,
     _ => Icons.build_outlined,
   };
+
+  Future<void> _showProductDetails(CommerceProduct product) async {
+    final photos = product.photos;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF171B20),
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * .9,
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              const _Handle(),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    SizedBox(
+                      height: 310,
+                      child: photos.isEmpty
+                          ? Center(
+                              child: Icon(
+                                _productIcon(product.category),
+                                color: widget.accent,
+                                size: 92,
+                              ),
+                            )
+                          : PageView.builder(
+                              itemCount: photos.length,
+                              itemBuilder: (_, index) => Image.memory(
+                                photos[index],
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                    ),
+                    if (photos.length > 1)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          '${photos.length} fotos publicadas',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Color(0xFFB7BBC2)),
+                        ),
+                      ),
+                    const SizedBox(height: 18),
+                    Text(
+                      product.name,
+                      style: const TextStyle(
+                        fontSize: 25,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    if (product.brand.isNotEmpty)
+                      Text(
+                        'Marca: ${product.brand}',
+                        style: const TextStyle(color: Color(0xFFB7BBC2)),
+                      ),
+                    if (product.sku.isNotEmpty)
+                      Text(
+                        'Referencia: ${product.sku}',
+                        style: const TextStyle(color: Color(0xFFB7BBC2)),
+                      ),
+                    const SizedBox(height: 12),
+                    Text(
+                      commerceMoney(product.priceCents),
+                      style: TextStyle(
+                        color: widget.accent,
+                        fontSize: 29,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      product.description.isEmpty
+                          ? 'Sin descripción adicional.'
+                          : product.description,
+                    ),
+                    const SizedBox(height: 20),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        widget.onOpenSupport();
+                      },
+                      icon: const Icon(Icons.chat_bubble_outline_rounded),
+                      label: const Text('Preguntar al taller'),
+                    ),
+                    const SizedBox(height: 10),
+                    FilledButton.icon(
+                      onPressed: product.available
+                          ? () {
+                              Navigator.pop(sheetContext);
+                              _checkout(product);
+                            }
+                          : null,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: widget.accent,
+                        foregroundColor: Colors.black,
+                      ),
+                      icon: const Icon(Icons.shopping_cart_checkout_rounded),
+                      label: const Text('Elegir cantidad y comprar'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _orderCard(CommerceOrder order) => Container(
     margin: const EdgeInsets.only(bottom: 8),
@@ -1338,7 +1497,7 @@ class _SupportPageState extends State<_SupportPage> {
               title: const Text('Tomar foto'),
               onTap: () {
                 Navigator.pop(context);
-                _pickImage();
+                _takePhoto();
               },
             ),
             ListTile(
@@ -1435,6 +1594,46 @@ class _SupportPageState extends State<_SupportPage> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Imagen enviada al taller.')));
+  }
+
+  Future<void> _takePhoto() async {
+    final photo = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      imageQuality: 85,
+    );
+    if (!mounted || photo == null) return;
+    final bytes = await photo.readAsBytes();
+    final fileName = 'foto-${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final conversationId = _conversationId;
+    if (conversationId != null) {
+      try {
+        await _chatRepository.sendAttachment(
+          conversationId: conversationId,
+          bytes: bytes,
+          fileName: fileName,
+          mimeType: 'image/jpeg',
+        );
+      } catch (_) {
+        if (!mounted) return;
+        setState(
+          () => _messages.add(_ChatEntry(bytes: bytes, fileName: fileName)),
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('La foto quedó pendiente hasta recuperar conexión.'),
+          ),
+        );
+        return;
+      }
+    } else {
+      setState(
+        () => _messages.add(_ChatEntry(bytes: bytes, fileName: fileName)),
+      );
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Foto enviada al taller.')));
   }
 
   Future<void> _pickDocument() async {
@@ -2858,6 +3057,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
                   workshop: widget.workshop,
                   clientId: _clientId,
                   clientName: _profile.fullName,
+                  onOpenSupport: () => setState(() => _tab = 4),
                 ),
                 _SupportPage(
                   workshop: widget.workshop,
@@ -4411,7 +4611,16 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
     await widget.tenantContext.clear();
     widget.brandController.value = WorkshopBrand.defaultBrand;
     if (!mounted) return;
-    Navigator.of(context).popUntil((route) => route.isFirst);
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(
+        builder: (_) => RoleAccessScreen(
+          tenantContext: widget.tenantContext,
+          brandController: widget.brandController,
+          authController: widget.authController,
+        ),
+      ),
+      (_) => false,
+    );
   }
 
   void _notice(String text) {

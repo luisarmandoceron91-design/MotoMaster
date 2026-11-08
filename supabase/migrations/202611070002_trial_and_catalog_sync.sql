@@ -16,7 +16,8 @@ alter table public.products
   add column if not exists category text not null default 'Otros',
   add column if not exists brand text not null default '',
   add column if not exists barcode text not null default '',
-  add column if not exists image_base64 text;
+  add column if not exists image_base64 text,
+  add column if not exists image_gallery_base64 jsonb not null default '[]'::jsonb;
 
 create index if not exists products_catalog_search_idx
   on public.products (workshop_id, is_active, category);

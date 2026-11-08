@@ -32,6 +32,7 @@ class CommerceProduct {
     this.active = true,
     this.imagePath,
     this.imageBytes,
+    this.imageGallery = const [],
   });
 
   final String id;
@@ -52,6 +53,15 @@ class CommerceProduct {
   final String? imagePath;
   final Uint8List? imageBytes;
 
+  /// Hasta cuatro fotografías del mismo producto, en el orden publicado.
+  final List<Uint8List> imageGallery;
+
+  List<Uint8List> get photos => imageGallery.isNotEmpty
+      ? List.unmodifiable(imageGallery.take(4))
+      : imageBytes == null
+      ? const []
+      : [imageBytes!];
+
   bool get available => active && stock > 0;
   bool get lowStock => stock <= minimumStock;
 
@@ -71,6 +81,7 @@ class CommerceProduct {
     bool? active,
     String? imagePath,
     Uint8List? imageBytes,
+    List<Uint8List>? imageGallery,
     bool clearImageBytes = false,
   }) => CommerceProduct(
     id: id,
@@ -90,6 +101,7 @@ class CommerceProduct {
     active: active ?? this.active,
     imagePath: imagePath ?? this.imagePath,
     imageBytes: clearImageBytes ? null : imageBytes ?? this.imageBytes,
+    imageGallery: imageGallery ?? this.imageGallery,
   );
 
   Map<String, dynamic> toJson() => {
@@ -110,6 +122,7 @@ class CommerceProduct {
     'active': active,
     'image_path': imagePath,
     'image_base64': imageBytes == null ? null : base64Encode(imageBytes!),
+    'image_gallery_base64': photos.map(base64Encode).toList(),
   };
 
   factory CommerceProduct.fromJson(Map<String, dynamic> json) =>
@@ -131,7 +144,13 @@ class CommerceProduct {
         active: json['active'] as bool? ?? true,
         imagePath: json['image_path']?.toString(),
         imageBytes: _decodeProductImage(json['image_base64']),
+        imageGallery: _decodeProductGallery(json['image_gallery_base64']),
       );
+}
+
+List<Uint8List> _decodeProductGallery(dynamic value) {
+  if (value is! List) return const [];
+  return value.map(_decodeProductImage).whereType<Uint8List>().take(4).toList();
 }
 
 Uint8List? _decodeProductImage(dynamic value) {
