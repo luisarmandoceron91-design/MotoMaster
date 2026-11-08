@@ -743,11 +743,14 @@ class _ClientRegistrationViewState extends State<ClientRegistrationView> {
             return;
           }
           if (widget.controller.requiresEmailConfirmation) {
+            // Supabase puede requerir la confirmación del correo antes de
+            // entregar una sesión. La cuenta ya quedó creada y el cliente
+            // debe continuar al directorio, no quedar devuelto a la pantalla
+            // anterior sin saber qué ocurrió. Al intentar entrar a un taller
+            // se le recordará confirmar el correo e iniciar sesión.
             _showMessage(
-              'Cuenta creada. Revisa tu correo para confirmar el acceso al taller.',
+              'Cuenta creada. Confirma tu correo para poder entrar a un taller.',
             );
-            Navigator.of(context).pop();
-            return;
           }
           if (widget.controller.savedLocally) {
             _showMessage(

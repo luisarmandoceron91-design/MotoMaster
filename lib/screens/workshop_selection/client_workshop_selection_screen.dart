@@ -552,7 +552,7 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Confirma tu correo e inicia sesión para entrar al taller.',
+            'Tu cuenta fue creada. Confirma el correo y luego inicia sesión para entrar al taller.',
           ),
         ),
       );
