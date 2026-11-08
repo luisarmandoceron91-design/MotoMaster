@@ -754,10 +754,13 @@ class _PartsPageState extends State<_PartsPage> {
                       ? .82
                       : constraints.maxWidth > 560
                       ? .95
-                      : 1.7,
+                      : .75,
                 ),
                 itemBuilder: (_, index) {
                   final part = visible[index];
+                  final previewPhoto = part.photos.isEmpty
+                      ? null
+                      : part.photos.first;
                   return Material(
                     color: const Color(0xEE191B1E),
                     shape: RoundedRectangleBorder(
@@ -772,16 +775,22 @@ class _PartsPageState extends State<_PartsPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
+                            SizedBox(
+                              height: constraints.maxWidth > 560 ? 150 : 190,
                               child: Center(
-                                child: part.imageBytes != null
+                                child: previewPhoto != null
                                     ? ClipRRect(
                                         borderRadius: BorderRadius.circular(8),
                                         child: Image.memory(
-                                          part.imageBytes!,
+                                          previewPhoto,
                                           width: double.infinity,
                                           height: double.infinity,
                                           fit: BoxFit.contain,
+                                          errorBuilder: (_, _, _) => Icon(
+                                            _productIcon(part.category),
+                                            color: widget.accent,
+                                            size: 52,
+                                          ),
                                         ),
                                       )
                                     : Icon(

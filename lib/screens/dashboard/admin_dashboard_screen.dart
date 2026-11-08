@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:printing/printing.dart';
 
 import '../../core/auth/admin_access_service.dart';
@@ -2461,6 +2462,19 @@ class _WorkshopChatPanel extends StatelessWidget {
               const SizedBox(height: 10),
               Row(
                 children: [
+                  IconButton(
+                    tooltip: 'Adjuntar foto o archivo',
+                    onPressed: () => _showAdminAttachmentMenu(
+                      context,
+                      brand.accentColor,
+                      repository,
+                      conversationId,
+                    ),
+                    icon: Icon(
+                      Icons.add_photo_alternate_outlined,
+                      color: brand.accentColor,
+                    ),
+                  ),
                   Expanded(
                     child: TextField(
                       controller: controller,
@@ -2499,6 +2513,99 @@ class _WorkshopChatPanel extends StatelessWidget {
     );
     controller.dispose();
   }
+}
+
+Future<void> _showAdminAttachmentMenu(
+  BuildContext context,
+  Color accent,
+  ChatRepository repository,
+  String conversationId,
+) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: const Color(0xFF1A1F24),
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: Icon(Icons.photo_camera_outlined, color: accent),
+            title: const Text('Tomar foto'),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              _sendAdminCameraPhoto(repository, conversationId);
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.photo_library_outlined, color: accent),
+            title: const Text('Elegir de galería'),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              _sendAdminPickedFile(repository, conversationId, imageOnly: true);
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.description_outlined, color: accent),
+            title: const Text('Enviar documento'),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              _sendAdminPickedFile(
+                repository,
+                conversationId,
+                imageOnly: false,
+              );
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Future<void> _sendAdminCameraPhoto(
+  ChatRepository repository,
+  String conversationId,
+) async {
+  final photo = await ImagePicker().pickImage(
+    source: ImageSource.camera,
+    imageQuality: 85,
+  );
+  if (photo == null) return;
+  await repository.sendAttachment(
+    conversationId: conversationId,
+    bytes: await photo.readAsBytes(),
+    fileName: 'foto-${DateTime.now().millisecondsSinceEpoch}.jpg',
+    mimeType: 'image/jpeg',
+  );
+}
+
+Future<void> _sendAdminPickedFile(
+  ChatRepository repository,
+  String conversationId, {
+  required bool imageOnly,
+}) async {
+  final picked = await FilePicker.platform.pickFiles(
+    type: imageOnly ? FileType.image : FileType.custom,
+    allowedExtensions: imageOnly ? null : const ['pdf', 'doc', 'docx'],
+    withData: true,
+  );
+  final file = picked?.files.single;
+  final bytes = file?.bytes;
+  if (file == null || bytes == null) return;
+  await repository.sendAttachment(
+    conversationId: conversationId,
+    bytes: bytes,
+    fileName: file.name,
+    mimeType: _adminMimeType(file.name, image: imageOnly),
+  );
+}
+
+String _adminMimeType(String fileName, {required bool image}) {
+  if (!image) return 'application/octet-stream';
+  final lower = fileName.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  return 'image/jpeg';
 }
 
 class _WorkshopClientsPanel extends StatefulWidget {
@@ -2795,14 +2902,7 @@ class _WorkshopClientsPanelState extends State<_WorkshopClientsPanel> {
                                   : const Color(0xFF292C31),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Text(
-                              message['body']?.toString().isNotEmpty == true
-                                  ? message['body'].toString()
-                                  : 'Archivo adjunto',
-                              style: TextStyle(
-                                color: mine ? Colors.black : Colors.white,
-                              ),
-                            ),
+                            child: _cloudMessageBody(message, repository, mine),
                           ),
                         );
                       },
@@ -2813,6 +2913,15 @@ class _WorkshopClientsPanelState extends State<_WorkshopClientsPanel> {
               const SizedBox(height: 10),
               Row(
                 children: [
+                  IconButton(
+                    tooltip: 'Adjuntar foto o archivo',
+                    onPressed: () =>
+                        _showCloudAttachmentMenu(repository, conversationId),
+                    icon: Icon(
+                      Icons.add_photo_alternate_outlined,
+                      color: widget.brand.accentColor,
+                    ),
+                  ),
                   Expanded(
                     child: TextField(
                       controller: controller,
@@ -2864,6 +2973,168 @@ class _WorkshopClientsPanelState extends State<_WorkshopClientsPanel> {
     if (text.isEmpty) return;
     controller.clear();
     await repository.sendMessage(conversationId: conversationId, body: text);
+  }
+
+  Future<void> _showCloudAttachmentMenu(
+    ChatRepository repository,
+    String conversationId,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1A1F24),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(
+                Icons.photo_camera_outlined,
+                color: widget.brand.accentColor,
+              ),
+              title: const Text('Tomar foto'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _takeCloudPhoto(repository, conversationId);
+              },
+            ),
+            ListTile(
+              leading: Icon(
+                Icons.photo_library_outlined,
+                color: widget.brand.accentColor,
+              ),
+              title: const Text('Elegir de galería'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _pickCloudAttachment(
+                  repository,
+                  conversationId,
+                  imageOnly: true,
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(
+                Icons.description_outlined,
+                color: widget.brand.accentColor,
+              ),
+              title: const Text('Enviar documento'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _pickCloudAttachment(
+                  repository,
+                  conversationId,
+                  imageOnly: false,
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _takeCloudPhoto(
+    ChatRepository repository,
+    String conversationId,
+  ) async {
+    final photo = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      imageQuality: 85,
+    );
+    if (!mounted || photo == null) return;
+    await repository.sendAttachment(
+      conversationId: conversationId,
+      bytes: await photo.readAsBytes(),
+      fileName: 'foto-${DateTime.now().millisecondsSinceEpoch}.jpg',
+      mimeType: 'image/jpeg',
+    );
+  }
+
+  Future<void> _pickCloudAttachment(
+    ChatRepository repository,
+    String conversationId, {
+    required bool imageOnly,
+  }) async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: imageOnly ? FileType.image : FileType.custom,
+      allowedExtensions: imageOnly ? null : const ['pdf', 'doc', 'docx'],
+      withData: true,
+    );
+    final file = picked?.files.single;
+    final bytes = file?.bytes;
+    if (!mounted || file == null || bytes == null) return;
+    await repository.sendAttachment(
+      conversationId: conversationId,
+      bytes: bytes,
+      fileName: file.name,
+      mimeType: _adminMimeType(file.name, image: imageOnly),
+    );
+  }
+
+  Widget _cloudMessageBody(
+    Map<String, dynamic> message,
+    ChatRepository repository,
+    bool mine,
+  ) {
+    final body = message['body']?.toString().trim() ?? '';
+    final path = message['attachment_path']?.toString() ?? '';
+    final fileName = path.split('/').last.replaceFirst(RegExp(r'^\d+_'), '');
+    final isImage = RegExp(
+      r'\.(jpe?g|png|webp|gif)$',
+      caseSensitive: false,
+    ).hasMatch(fileName);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (path.isNotEmpty)
+          isImage
+              ? FutureBuilder<String>(
+                  future: repository.signedAttachmentUrl(path),
+                  builder: (_, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const SizedBox(
+                        width: 240,
+                        height: 140,
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        snapshot.data!,
+                        width: 240,
+                        height: 140,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Text('No fue posible cargar la imagen.'),
+                        ),
+                      ),
+                    );
+                  },
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.description_outlined),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        fileName.isEmpty ? 'Archivo adjunto' : fileName,
+                      ),
+                    ),
+                  ],
+                ),
+        if (body.isNotEmpty) ...[
+          if (path.isNotEmpty) const SizedBox(height: 8),
+          Text(
+            body,
+            style: TextStyle(color: mine ? Colors.black : Colors.white),
+          ),
+        ],
+      ],
+    );
   }
 
   Future<void> _removeClient(WorkshopClientRecord client) async {
