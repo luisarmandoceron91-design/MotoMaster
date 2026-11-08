@@ -3527,7 +3527,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
               child: Container(
                 color: const Color(0xFF101214),
                 child: product.imageBytes != null
-                    ? Image.memory(product.imageBytes!, fit: BoxFit.cover)
+                    ? Image.memory(product.imageBytes!, fit: BoxFit.contain)
                     : Center(
                         child: Icon(
                           _catalogIcon(product.category),
@@ -4227,7 +4227,13 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                           : Stack(
                               fit: StackFit.expand,
                               children: [
-                                Image.memory(imageBytes!, fit: BoxFit.cover),
+                                // Muestra la foto completa, sin recortar la
+                                // llanta ni cualquier otro repuesto.
+                                Image.memory(
+                                  imageBytes!,
+                                  fit: BoxFit.contain,
+                                  alignment: Alignment.center,
+                                ),
                                 Positioned(
                                   right: 10,
                                   top: 10,
@@ -4324,81 +4330,13 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                         setDialogState(() => category = value ?? category),
                   ),
                   const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: cost,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Costo de compra COP',
-                            prefixIcon: Icon(Icons.shopping_cart_outlined),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: price,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Precio de venta COP *',
-                            prefixIcon: Icon(Icons.payments_outlined),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: stock,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Existencias *',
-                            prefixIcon: Icon(Icons.inventory_outlined),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: minimumStock,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Alerta de stock mínimo',
-                            prefixIcon: Icon(Icons.warning_amber_rounded),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: supplier,
-                          decoration: const InputDecoration(
-                            labelText: 'Proveedor',
-                            prefixIcon: Icon(Icons.local_shipping_outlined),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: location,
-                          decoration: const InputDecoration(
-                            labelText: 'Ubicación en bodega',
-                            hintText: 'Ej. Estante A-3',
-                            prefixIcon: Icon(Icons.shelves),
-                          ),
-                        ),
-                      ),
-                    ],
+                  TextField(
+                    controller: price,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Precio de venta COP *',
+                      prefixIcon: Icon(Icons.payments_outlined),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   TextField(
@@ -4444,7 +4382,6 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
       final productName = name.text.trim();
       final productBrand = brand.text.trim();
       final salePrice = int.tryParse(price.text) ?? 0;
-      final productStock = int.tryParse(stock.text) ?? 0;
       if (productName.isEmpty || productBrand.isEmpty || salePrice <= 0) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -4473,7 +4410,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
             CommerceProduct(
               id:
                   current?.id ??
-                  '${widget.workshopId}-${DateTime.now().microsecondsSinceEpoch}',
+                  CommerceStore.newProductId(),
               workshopId: widget.workshopId,
               name: productName,
               brand: productBrand,
@@ -4481,12 +4418,14 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
               sku: sku.text.trim(),
               category: category,
               description: description.text.trim(),
-              costPriceCents: (int.tryParse(cost.text) ?? 0) * 100,
+              costPriceCents: current?.costPriceCents ?? 0,
               priceCents: salePrice * 100,
-              stock: productStock,
-              minimumStock: int.tryParse(minimumStock.text) ?? 3,
-              supplier: supplier.text.trim(),
-              location: location.text.trim(),
+              // El catálogo público no obliga a administrar bodega. Los
+              // productos nuevos se publican con una unidad disponible.
+              stock: current?.stock ?? 1,
+              minimumStock: current?.minimumStock ?? 0,
+              supplier: current?.supplier ?? '',
+              location: current?.location ?? '',
               active: visibleForClients,
               imagePath: current?.imagePath,
               imageBytes: imageBytes,

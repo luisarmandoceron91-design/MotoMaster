@@ -253,16 +253,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 10),
-                          const Text(
-                            'Primer acceso: usuario admin y contraseña 123456. Después debes crear credenciales personales.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Color(0xFFAAAEB5),
-                              fontSize: 12,
-                              height: 1.35,
-                            ),
-                          ),
                           TextButton.icon(
                             onPressed: () => Navigator.of(context).pop(),
                             icon: const Icon(

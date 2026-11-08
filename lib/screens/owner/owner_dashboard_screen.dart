@@ -1823,6 +1823,21 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Future<void> _showNotifications() async {
     setState(() => _notificationsRead = true);
     final pending = _issues.where((issue) => !issue.resolved).toList();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final newToday = _workshops
+        .where((workshop) =>
+            !workshop.isDeleted &&
+            workshop.createdAt != null &&
+            !workshop.createdAt!.isBefore(today))
+        .toList();
+    final trials = _workshops
+        .where((workshop) =>
+            !workshop.isDeleted &&
+            workshop.status == 'Prueba' &&
+            workshop.trialEndsAt != null)
+        .toList()
+      ..sort((a, b) => a.trialEndsAt!.compareTo(b.trialEndsAt!));
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -1840,7 +1855,48 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 12),
-              if (pending.isEmpty)
+              if (newToday.isNotEmpty) ...[
+                Text(
+                  'Talleres creados hoy (${newToday.length})',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                for (final workshop in newToday)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.storefront_outlined, color: _success),
+                    title: Text(workshop.name),
+                    subtitle: Text('${workshop.location.isEmpty ? 'Ubicación pendiente' : workshop.location} · nuevo registro'),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      setState(() => _section = _Section.workshops);
+                    },
+                  ),
+                const Divider(),
+              ],
+              if (trials.isNotEmpty) ...[
+                Text(
+                  'Talleres en prueba (${trials.length})',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                for (final workshop in trials)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.hourglass_bottom_rounded,
+                      color: workshop.trialEndsAt!.isBefore(now.add(const Duration(days: 2)))
+                          ? _danger
+                          : _warning,
+                    ),
+                    title: Text(workshop.name),
+                    subtitle: Text('Prueba vence ${_trialTimeRemaining(workshop.trialEndsAt!, now)}'),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      setState(() => _section = _Section.workshops);
+                    },
+                  ),
+                const Divider(),
+              ],
+              if (pending.isEmpty && newToday.isEmpty && trials.isEmpty)
                 const ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.check_circle_outline, color: _success),
@@ -1877,6 +1933,16 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         ),
       ),
     );
+  }
+
+  String _trialTimeRemaining(DateTime endsAt, DateTime now) {
+    final remaining = endsAt.difference(now);
+    if (remaining.isNegative) return 'hoy; requiere decisión';
+    final days = remaining.inDays;
+    if (days >= 1) {
+      return 'en $days día${days == 1 ? '' : 's'}';
+    }
+    return 'en ${remaining.inHours.clamp(1, 24)} horas';
   }
 
   Future<void> _confirmLogout() async {

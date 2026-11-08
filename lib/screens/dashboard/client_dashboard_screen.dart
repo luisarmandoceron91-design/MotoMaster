@@ -733,7 +733,7 @@ class _PartsPageState extends State<_PartsPage> {
                                           part.imageBytes!,
                                           width: double.infinity,
                                           height: double.infinity,
-                                          fit: BoxFit.cover,
+                                          fit: BoxFit.contain,
                                         ),
                                       )
                                     : Icon(

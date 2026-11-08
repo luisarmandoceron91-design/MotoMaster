@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../networking/api_client.dart';
 import 'commerce_models.dart';
 import 'inventory_models.dart';
 
@@ -15,6 +16,17 @@ class CommerceStore {
   static const _pointOfSaleKey = 'commerce_point_of_sale_v1';
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
+  /// UUID válido para que un producto nuevo pueda guardarse tanto localmente
+  /// como en Supabase con el mismo identificador.
+  static String newProductId() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex = bytes.map((value) => value.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
+  }
+
   Future<List<CommerceProduct>> listProducts(String workshopId) async {
     final prefs = await SharedPreferences.getInstance();
     var all = _decodeList(
@@ -24,6 +36,26 @@ class CommerceStore {
     if (cleaned.length != all.length) {
       all = cleaned;
       await _saveProducts(all);
+    }
+    if (ApiClient.cloudEnabled && ApiClient().client.auth.currentUser != null) {
+      try {
+        final rows = await ApiClient().client
+            .from('products')
+            .select()
+            .eq('workshop_id', workshopId);
+        final cloud = rows
+            .map((row) => _cloudProduct(Map<String, dynamic>.from(row)))
+            .toList();
+        final merged = <String, CommerceProduct>{
+          for (final product in all) product.id: product,
+          for (final product in cloud) product.id: product,
+        };
+        all = merged.values.toList();
+        await _saveProducts(all);
+      } catch (_) {
+        // Se mantiene el catálogo local si temporalmente no hay conexión o
+        // la migración de catálogo aún está aplicándose.
+      }
     }
     final items = all.where((item) => item.workshopId == workshopId).toList();
     items.sort((a, b) => a.name.compareTo(b.name));
@@ -53,6 +85,16 @@ class CommerceStore {
     final previousStock = index < 0 ? 0 : all[index].stock;
     index < 0 ? all.add(product) : all[index] = product;
     await _saveProducts(all);
+    if (ApiClient.cloudEnabled && ApiClient().client.auth.currentUser != null) {
+      try {
+        await ApiClient().client
+            .from('products')
+            .upsert(_cloudPayload(product));
+      } catch (_) {
+        // El producto queda guardado localmente y se sincronizará al abrir
+        // el inventario cuando la red vuelva a estar disponible.
+      }
+    }
     final difference = product.stock - previousStock;
     if (difference != 0) {
       await _appendMovement(
@@ -109,7 +151,53 @@ class CommerceStore {
           ).map(CommerceProduct.fromJson).toList()
           ..removeWhere((item) => item.id == productId);
     await _saveProducts(all);
+    if (ApiClient.cloudEnabled && ApiClient().client.auth.currentUser != null) {
+      try {
+        await ApiClient().client.from('products').delete().eq('id', productId);
+      } catch (_) {}
+    }
     revision.value++;
+  }
+
+  CommerceProduct _cloudProduct(Map<String, dynamic> row) => CommerceProduct(
+    id: row['id'].toString(),
+    workshopId: row['workshop_id'].toString(),
+    name: row['name']?.toString() ?? '',
+    category: row['category']?.toString() ?? 'Otros',
+    description: row['description']?.toString() ?? '',
+    priceCents: ((row['price'] as num?)?.toDouble() ?? 0).round() * 100,
+    stock: (row['stock'] as num?)?.toInt() ?? 1,
+    brand: row['brand']?.toString() ?? '',
+    barcode: row['barcode']?.toString() ?? '',
+    sku: row['sku']?.toString() ?? '',
+    active: row['is_active'] as bool? ?? true,
+    imagePath: row['image_path']?.toString(),
+    imageBytes: _decodeCloudImage(row['image_base64']),
+  );
+
+  Map<String, dynamic> _cloudPayload(CommerceProduct product) => {
+    'id': product.id,
+    'workshop_id': product.workshopId,
+    'name': product.name,
+    'category': product.category,
+    'description': product.description,
+    'price': product.priceCents ~/ 100,
+    'stock': product.stock,
+    'brand': product.brand,
+    'barcode': product.barcode,
+    'sku': product.sku,
+    'is_active': product.active,
+    'image_path': product.imagePath,
+    'image_base64': product.imageBytes == null ? null : base64Encode(product.imageBytes!),
+  };
+
+  Uint8List? _decodeCloudImage(dynamic value) {
+    if (value == null || value.toString().isEmpty) return null;
+    try {
+      return base64Decode(value.toString());
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> purgeWorkshop(String workshopId) async {

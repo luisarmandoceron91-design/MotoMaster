@@ -68,7 +68,9 @@ class LocalWorkshopAdminAccount {
 class LocalWorkshopAdminStore {
   static const bootstrapUsername = 'admin';
   static const bootstrapPassword = '123456';
-  static const trialDuration = Duration(days: 3);
+  // Cada taller nuevo recibe 15 días. El propietario puede ampliar el plazo
+  // individualmente desde el centro de control cuando lo necesite.
+  static const trialDuration = Duration(days: 15);
 
   static const _accountsKey = 'workshop_admin_accounts_v3';
   static const _activeEmailKey = 'active_workshop_admin_email_v3';

@@ -174,7 +174,7 @@ class WorkshopRepository {
         email: email.trim().toLowerCase(),
         openingHours: openingHours,
         trialStartedAt: now,
-        trialEndsAt: now.add(const Duration(days: 3)),
+        trialEndsAt: now.add(const Duration(days: 15)),
       );
       await _local.upsert(workshop);
       return workshop;
