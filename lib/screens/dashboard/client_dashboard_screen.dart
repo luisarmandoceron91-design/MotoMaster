@@ -158,12 +158,15 @@ class _ClientSettingsScreenState extends State<_ClientSettingsScreen> {
                                 radius: 48,
                                 backgroundColor: accent.withValues(alpha: .16),
                                 backgroundImage:
-                                    widget.profile.profilePhotoBytes == null
-                                    ? null
-                                    : MemoryImage(
+                                    widget.profile.profilePhotoBytes != null
+                                    ? MemoryImage(
                                         widget.profile.profilePhotoBytes!,
-                                      ),
-                                child: widget.profile.profilePhotoBytes == null
+                                      )
+                                    : (widget.profile.avatarUrl?.trim().isNotEmpty ?? false)
+                                    ? NetworkImage(widget.profile.avatarUrl!)
+                                    : null,
+                                child: widget.profile.profilePhotoBytes == null &&
+                                        !(widget.profile.avatarUrl?.trim().isNotEmpty ?? false)
                                     ? Icon(
                                         Icons.person_rounded,
                                         color: accent,
@@ -781,15 +784,20 @@ class _PartsPageState extends State<_PartsPage> {
                                 child: previewPhoto != null
                                     ? ClipRRect(
                                         borderRadius: BorderRadius.circular(8),
-                                        child: Image.memory(
-                                          previewPhoto,
-                                          width: double.infinity,
-                                          height: double.infinity,
-                                          fit: BoxFit.contain,
-                                          errorBuilder: (_, _, _) => Icon(
-                                            _productIcon(part.category),
-                                            color: widget.accent,
-                                            size: 52,
+                                        child: ClipRect(
+                                          child: Transform.scale(
+                                            scale: 1.30,
+                                            child: Image.memory(
+                                              previewPhoto,
+                                              width: double.infinity,
+                                              height: double.infinity,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, _, _) => Icon(
+                                                _productIcon(part.category),
+                                                color: widget.accent,
+                                                size: 52,
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       )
@@ -1075,23 +1083,46 @@ class _PartsPageState extends State<_PartsPage> {
                   const SizedBox(height: 18),
                   Row(
                     children: [
-                      const Text('Cantidad'),
-                      const Spacer(),
-                      IconButton(
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Cantidad',
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            Text(
+                              '${product.stock} disponibles',
+                              style: const TextStyle(
+                                color: Color(0xFFB7BBC2),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton.filledTonal(
+                        tooltip: 'Restar una unidad',
                         onPressed: quantity > 1
                             ? () => setModalState(() => quantity--)
                             : null,
-                        icon: const Icon(Icons.remove_circle_outline),
+                        icon: const Icon(Icons.remove_rounded),
                       ),
+                      const SizedBox(width: 8),
                       Text(
                         '$quantity',
-                        style: const TextStyle(fontWeight: FontWeight.w900),
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
-                      IconButton(
+                      const SizedBox(width: 8),
+                      IconButton.filledTonal(
+                        tooltip: 'Sumar una unidad',
                         onPressed: quantity < product.stock
                             ? () => setModalState(() => quantity++)
                             : null,
-                        icon: const Icon(Icons.add_circle_outline),
+                        icon: const Icon(Icons.add_rounded),
                       ),
                     ],
                   ),
@@ -1125,7 +1156,21 @@ class _PartsPageState extends State<_PartsPage> {
                     ),
                     child: Row(
                       children: [
-                        const Expanded(child: Text('Total a pagar')),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Total a pagar'),
+                              Text(
+                                '$quantity × ${commerceMoney(product.priceCents)}',
+                                style: const TextStyle(
+                                  color: Color(0xFFB7BBC2),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                         Text(
                           commerceMoney(product.priceCents * quantity),
                           style: TextStyle(
@@ -1724,13 +1769,21 @@ class _LocalChatAttachment extends StatelessWidget {
           border: Border.all(color: const Color(0xFF414850)),
         ),
         child: isImage
-            ? ClipRRect(
+            ? InkWell(
                 borderRadius: BorderRadius.circular(5),
-                child: Image.memory(
-                  message.bytes!,
-                  width: 280,
-                  height: 155,
-                  fit: BoxFit.cover,
+                onTap: () => ChatAttachmentActions.openImageBytes(
+                  context,
+                  bytes: message.bytes!,
+                  fileName: fileName,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(5),
+                  child: Image.memory(
+                    message.bytes!,
+                    width: 280,
+                    height: 155,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               )
             : Padding(
@@ -3042,7 +3095,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
           ),
           PopupMenuButton<String>(
             tooltip: 'Cuenta',
-            icon: const Icon(Icons.account_circle_outlined),
+            icon: _headerProfileAvatar(),
             onSelected: (value) {
               if (value == 'profile') _openSettings();
               if (value == 'recovery') _openRecovery();
@@ -3113,7 +3166,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
                 _SupportPage(
                   workshop: widget.workshop,
                   accent: accent,
-                  profile: widget.profile,
+                  profile: _profile,
                 ),
               ],
             ),
@@ -3175,6 +3228,27 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _headerProfileAvatar() {
+    final hasPhotoBytes = _profile.profilePhotoBytes != null;
+    final hasPhotoUrl = _profile.avatarUrl?.trim().isNotEmpty ?? false;
+    return CircleAvatar(
+      radius: 17,
+      backgroundColor: widget.brand.accentColor.withValues(alpha: .18),
+      backgroundImage: hasPhotoBytes
+          ? MemoryImage(_profile.profilePhotoBytes!)
+          : hasPhotoUrl
+          ? NetworkImage(_profile.avatarUrl!)
+          : null,
+      child: hasPhotoBytes || hasPhotoUrl
+          ? null
+          : Icon(
+              Icons.person_rounded,
+              color: widget.brand.accentColor,
+              size: 22,
+            ),
     );
   }
 
@@ -3621,12 +3695,9 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
           child: Container(
-            padding: EdgeInsets.fromLTRB(
-              22,
-              18,
-              22,
-              MediaQuery.viewInsetsOf(dialogContext).bottom + 20,
-            ),
+            // El diálogo ya se desplaza por encima del teclado. Agregar el
+            // alto del teclado aquí hacía que los campos quedaran ocultos.
+            padding: const EdgeInsets.fromLTRB(22, 18, 22, 20),
             decoration: BoxDecoration(
               color: const Color(0xFF191E23),
               borderRadius: BorderRadius.circular(8),
@@ -3636,6 +3707,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
               ],
             ),
             child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -3807,6 +3879,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
   }) => TextField(
     controller: controller,
     keyboardType: number ? TextInputType.number : TextInputType.text,
+    scrollPadding: const EdgeInsets.only(bottom: 180),
     decoration: InputDecoration(
       labelText: label,
       hintText: hint,

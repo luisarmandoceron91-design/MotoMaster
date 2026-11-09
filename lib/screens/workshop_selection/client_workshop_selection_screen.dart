@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/admin_auth_controller.dart';
+import '../../core/auth/auth_service.dart';
 import '../../core/branding/workshop_brand.dart';
 import '../../core/client/client_profile.dart';
+import '../../core/client/local_client_profile_store.dart';
 import '../../core/location/colombia_locations.dart';
 import '../../core/networking/api_client.dart';
 import '../../core/tenant/tenant_context.dart';
@@ -17,6 +19,7 @@ import '../../core/workshops/local_workshop_directory_store.dart';
 import '../../core/workshops/workshop_repository.dart';
 import '../../core/workshops/workshop_identity.dart';
 import '../dashboard/client_dashboard_screen.dart';
+import '../access/role_access_screen.dart';
 
 const _orange = Color(0xFFFF6500);
 const _panel = Color(0xF21B1D20);
@@ -253,15 +256,81 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
               ),
               const SizedBox(width: 18),
             ],
-            _Avatar(profile: widget.profile),
-            const SizedBox(width: 9),
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: compact ? 62 : 130),
-              child: Text(firstName, overflow: TextOverflow.ellipsis),
+            PopupMenuButton<String>(
+              tooltip: 'Opciones de cuenta',
+              onSelected: (action) {
+                if (action == 'signOut') _confirmSignOut();
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'signOut',
+                  child: ListTile(
+                    leading: Icon(Icons.logout_rounded),
+                    title: Text('Cerrar sesión'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _Avatar(profile: widget.profile),
+                    const SizedBox(width: 9),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: compact ? 62 : 130,
+                      ),
+                      child: Text(firstName, overflow: TextOverflow.ellipsis),
+                    ),
+                    const Icon(Icons.expand_more_rounded, size: 20),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _confirmSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('¿Cerrar sesión?'),
+        content: const Text(
+          'Podrás volver a ingresar con tu correo y contraseña cuando quieras.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.logout_rounded),
+            label: const Text('Cerrar sesión'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await AuthService().signOut();
+    await LocalClientProfileStore().signOut();
+    await widget.tenantContext.clear();
+    widget.brandController.value = WorkshopBrand.defaultBrand;
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(
+        builder: (_) => RoleAccessScreen(
+          tenantContext: widget.tenantContext,
+          brandController: widget.brandController,
+          authController: widget.authController,
+        ),
+      ),
+      (_) => false,
     );
   }
 
@@ -1148,6 +1217,15 @@ class _Avatar extends StatelessWidget {
     child: ClipOval(
       child: profile.profilePhotoBytes != null
           ? Image.memory(profile.profilePhotoBytes!, fit: BoxFit.cover)
+          : (profile.avatarUrl?.trim().isNotEmpty ?? false)
+          ? Image.network(
+              profile.avatarUrl!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const ColoredBox(
+                color: Color(0xFF2A2C30),
+                child: Icon(Icons.person_rounded, color: Colors.white),
+              ),
+            )
           : const ColoredBox(
               color: Color(0xFF2A2C30),
               child: Icon(Icons.person_rounded, color: Colors.white),

@@ -2812,12 +2812,45 @@ class _WorkshopClientsPanelState extends State<_WorkshopClientsPanel> {
     }
   }
 
+  Widget _clientChatTitle(WorkshopClientRecord client) {
+    final initial = client.fullName.trim().isEmpty
+        ? 'C'
+        : client.fullName.trim()[0].toUpperCase();
+    final hasAvatar = client.avatarUrl?.trim().isNotEmpty ?? false;
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 18,
+          backgroundColor: widget.brand.accentColor.withValues(alpha: .16),
+          backgroundImage: hasAvatar ? NetworkImage(client.avatarUrl!) : null,
+          child: hasAvatar
+              ? null
+              : Text(
+                  initial,
+                  style: TextStyle(
+                    color: widget.brand.accentColor,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            client.fullName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _openLocalClientChat(WorkshopClientRecord client) async {
     final controller = TextEditingController();
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(client.fullName),
+        title: _clientChatTitle(client),
         content: SizedBox(
           width: 560,
           height: 520,
@@ -2946,7 +2979,7 @@ class _WorkshopClientsPanelState extends State<_WorkshopClientsPanel> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(client.fullName),
+        title: _clientChatTitle(client),
         content: SizedBox(
           width: 560,
           height: 520,
@@ -4596,6 +4629,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
           content: SizedBox(
             width: 640,
             child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -4687,6 +4721,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                       Expanded(
                         child: TextField(
                           controller: name,
+                          scrollPadding: const EdgeInsets.only(bottom: 190),
                           decoration: const InputDecoration(
                             labelText: 'Nombre del producto *',
                             prefixIcon: Icon(Icons.sell_outlined),
@@ -4697,6 +4732,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                       Expanded(
                         child: TextField(
                           controller: brand,
+                          scrollPadding: const EdgeInsets.only(bottom: 190),
                           decoration: const InputDecoration(
                             labelText: 'Marca *',
                             prefixIcon: Icon(Icons.verified_outlined),
@@ -4712,6 +4748,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                         child: TextField(
                           controller: barcode,
                           keyboardType: TextInputType.number,
+                          scrollPadding: const EdgeInsets.only(bottom: 190),
                           decoration: const InputDecoration(
                             labelText: 'Código de barras',
                             prefixIcon: Icon(Icons.barcode_reader),
@@ -4723,6 +4760,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                       Expanded(
                         child: TextField(
                           controller: sku,
+                          scrollPadding: const EdgeInsets.only(bottom: 190),
                           decoration: const InputDecoration(
                             labelText: 'Referencia / SKU',
                             prefixIcon: Icon(Icons.tag_rounded),
@@ -4763,6 +4801,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                   TextField(
                     controller: price,
                     keyboardType: TextInputType.number,
+                    scrollPadding: const EdgeInsets.only(bottom: 190),
                     decoration: const InputDecoration(
                       labelText: 'Precio de venta COP *',
                       prefixIcon: Icon(Icons.payments_outlined),
@@ -4772,6 +4811,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                   TextField(
                     controller: description,
                     maxLines: 2,
+                    scrollPadding: const EdgeInsets.only(bottom: 190),
                     decoration: const InputDecoration(
                       labelText: 'Descripción para el cliente',
                       prefixIcon: Icon(Icons.description_outlined),
@@ -4791,20 +4831,28 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                     onChanged: (value) =>
                         setDialogState(() => visibleForClients = value),
                   ),
+                  const SizedBox(height: 18),
+                  LayoutBuilder(
+                    builder: (context, constraints) => Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancelar'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Guardar producto'),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Guardar producto'),
-            ),
-          ],
         ),
       ),
     );
