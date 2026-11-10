@@ -29,6 +29,14 @@ class CommerceProduct {
     this.minimumStock = 3,
     this.supplier = '',
     this.location = '',
+    this.partNumber = '',
+    this.packageWeight = '',
+    this.productCondition = 'Nuevo',
+    this.origin = '',
+    this.oemCode = '',
+    this.includesPistons = false,
+    this.includesRings = false,
+    this.isKit = false,
     this.active = true,
     this.imagePath,
     this.imageBytes,
@@ -49,6 +57,15 @@ class CommerceProduct {
   final int minimumStock;
   final String supplier;
   final String location;
+  /// Datos visibles en la ficha detallada del producto para el cliente.
+  final String partNumber;
+  final String packageWeight;
+  final String productCondition;
+  final String origin;
+  final String oemCode;
+  final bool includesPistons;
+  final bool includesRings;
+  final bool isKit;
   final bool active;
   final String? imagePath;
   final Uint8List? imageBytes;
@@ -78,6 +95,14 @@ class CommerceProduct {
     int? minimumStock,
     String? supplier,
     String? location,
+    String? partNumber,
+    String? packageWeight,
+    String? productCondition,
+    String? origin,
+    String? oemCode,
+    bool? includesPistons,
+    bool? includesRings,
+    bool? isKit,
     bool? active,
     String? imagePath,
     Uint8List? imageBytes,
@@ -98,6 +123,14 @@ class CommerceProduct {
     minimumStock: minimumStock ?? this.minimumStock,
     supplier: supplier ?? this.supplier,
     location: location ?? this.location,
+    partNumber: partNumber ?? this.partNumber,
+    packageWeight: packageWeight ?? this.packageWeight,
+    productCondition: productCondition ?? this.productCondition,
+    origin: origin ?? this.origin,
+    oemCode: oemCode ?? this.oemCode,
+    includesPistons: includesPistons ?? this.includesPistons,
+    includesRings: includesRings ?? this.includesRings,
+    isKit: isKit ?? this.isKit,
     active: active ?? this.active,
     imagePath: imagePath ?? this.imagePath,
     imageBytes: clearImageBytes ? null : imageBytes ?? this.imageBytes,
@@ -119,6 +152,14 @@ class CommerceProduct {
     'minimum_stock': minimumStock,
     'supplier': supplier,
     'location': location,
+    'part_number': partNumber,
+    'package_weight': packageWeight,
+    'product_condition': productCondition,
+    'origin': origin,
+    'oem_code': oemCode,
+    'includes_pistons': includesPistons,
+    'includes_rings': includesRings,
+    'is_kit': isKit,
     'active': active,
     'image_path': imagePath,
     'image_base64': imageBytes == null ? null : base64Encode(imageBytes!),
@@ -141,6 +182,14 @@ class CommerceProduct {
         minimumStock: (json['minimum_stock'] as num?)?.toInt() ?? 3,
         supplier: json['supplier']?.toString() ?? '',
         location: json['location']?.toString() ?? '',
+        partNumber: json['part_number']?.toString() ?? '',
+        packageWeight: json['package_weight']?.toString() ?? '',
+        productCondition: json['product_condition']?.toString() ?? 'Nuevo',
+        origin: json['origin']?.toString() ?? '',
+        oemCode: json['oem_code']?.toString() ?? '',
+        includesPistons: json['includes_pistons'] as bool? ?? false,
+        includesRings: json['includes_rings'] as bool? ?? false,
+        isKit: json['is_kit'] as bool? ?? false,
         active: json['active'] as bool? ?? true,
         imagePath: json['image_path']?.toString(),
         imageBytes: _decodeProductImage(json['image_base64']),

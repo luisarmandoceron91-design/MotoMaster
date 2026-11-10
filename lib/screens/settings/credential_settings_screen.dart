@@ -10,9 +10,13 @@ class CredentialSettingsScreen extends StatefulWidget {
     super.key,
     required this.brand,
     this.localAdminStore,
+    this.passwordOnly = false,
   });
   final WorkshopBrand brand;
   final LocalWorkshopAdminStore? localAdminStore;
+  /// Cuando se abre desde Perfil solo muestra el flujo claro y seguro para
+  /// renovar la contraseña, sin confundirlo con recuperación de cuenta.
+  final bool passwordOnly;
   @override
   State<CredentialSettingsScreen> createState() =>
       _CredentialSettingsScreenState();
@@ -52,7 +56,7 @@ class _CredentialSettingsScreenState extends State<CredentialSettingsScreen> {
   Widget build(BuildContext context) {
     final accent = widget.brand.accentColor;
     return Scaffold(
-      appBar: AppBar(title: const Text('Credenciales de acceso')),
+      appBar: AppBar(title: Text(widget.passwordOnly ? 'Cambiar contraseña' : 'Credenciales de acceso')),
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -87,16 +91,18 @@ class _CredentialSettingsScreenState extends State<CredentialSettingsScreen> {
                           size: 42,
                         ),
                         const SizedBox(height: 14),
-                        const Text(
-                          'Actualiza tus credenciales',
+                        Text(
+                          widget.passwordOnly ? 'Cambia tu contraseña' : 'Actualiza tus credenciales',
                           style: TextStyle(
                             fontSize: 26,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Tu correo es tu usuario de acceso. Confirma tu contraseña actual antes de cambiarlo.',
+                        Text(
+                          widget.passwordOnly
+                              ? 'Confirma tu contraseña actual y crea una nueva clave segura para proteger tu cuenta.'
+                              : 'Tu correo es tu usuario de acceso. Confirma tu contraseña actual antes de cambiarlo.',
                         ),
                         const SizedBox(height: 26),
                         _SettingsField(
@@ -105,11 +111,13 @@ class _CredentialSettingsScreenState extends State<CredentialSettingsScreen> {
                           obscureText: true,
                         ),
                         const SizedBox(height: 16),
-                        _SettingsField(
-                          controller: _newUser,
-                          label: 'Correo electrónico de acceso',
-                        ),
-                        const SizedBox(height: 16),
+                        if (!widget.passwordOnly) ...[
+                          _SettingsField(
+                            controller: _newUser,
+                            label: 'Correo electrónico de acceso',
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                         _SettingsField(
                           controller: _newPassword,
                           label: 'Nueva contraseña',
@@ -135,8 +143,8 @@ class _CredentialSettingsScreenState extends State<CredentialSettingsScreen> {
                               foregroundColor: Colors.black,
                             ),
                             icon: const Icon(Icons.save_outlined),
-                            label: const Text(
-                              'Guardar credenciales',
+                            label: Text(
+                              widget.passwordOnly ? 'Actualizar contraseña' : 'Guardar credenciales',
                               style: TextStyle(fontWeight: FontWeight.w800),
                             ),
                           ),
@@ -183,9 +191,11 @@ class _CredentialSettingsScreenState extends State<CredentialSettingsScreen> {
     }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text(
-          'Contraseña actualizada. Si cambiaste el correo, confirma el enlace enviado por seguridad.',
+          widget.passwordOnly
+              ? 'Contraseña actualizada correctamente. Tus próximas sesiones usarán la nueva clave.'
+              : 'Contraseña actualizada. Si cambiaste el correo, confirma el enlace enviado por seguridad.',
         ),
       ),
     );

@@ -15,6 +15,7 @@ import '../../core/chat/chat_attachment_actions.dart';
 import '../../core/chat/local_chat_store.dart';
 import '../../core/client/client_service_store.dart';
 import '../../core/commerce/commerce_models.dart';
+import '../../core/commerce/product_gallery.dart';
 import '../../core/commerce/commerce_receipt_service.dart';
 import '../../core/commerce/commerce_store.dart';
 import '../../core/commerce/inventory_models.dart';
@@ -445,6 +446,7 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
         builder: (_) => CredentialSettingsScreen(
           brand: brand,
           localAdminStore: widget.localAdminStore,
+          passwordOnly: true,
         ),
       ),
     );
@@ -4092,8 +4094,19 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
               aspectRatio: 1.45,
               child: Container(
                 color: const Color(0xFF101214),
-                child: product.imageBytes != null
-                    ? Image.memory(product.imageBytes!, fit: BoxFit.contain)
+              child: product.imageBytes != null
+                    ? InkWell(
+                        onTap: () => showProductGallery(
+                          context,
+                          photos: product.photos,
+                          accent: widget.brand.accentColor,
+                        ),
+                        child: Image.memory(
+                          product.imageBytes!,
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.high,
+                        ),
+                      )
                     : Center(
                         child: Icon(
                           _catalogIcon(product.category),
@@ -4709,6 +4722,10 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
     );
     final sku = TextEditingController(text: current?.sku ?? '');
     final description = TextEditingController(text: current?.description ?? '');
+    final partNumber = TextEditingController(text: current?.partNumber ?? '');
+    final packageWeight = TextEditingController(text: current?.packageWeight ?? '');
+    final origin = TextEditingController(text: current?.origin ?? '');
+    final oemCode = TextEditingController(text: current?.oemCode ?? '');
     final cost = TextEditingController(
       text: current == null ? '' : (current.costPriceCents ~/ 100).toString(),
     );
@@ -4728,6 +4745,10 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
       null => 'Motor',
     };
     var visibleForClients = current?.active ?? true;
+    var productCondition = current?.productCondition ?? 'Nuevo';
+    var includesPistons = current?.includesPistons ?? false;
+    var includesRings = current?.includesRings ?? false;
+    var isKit = current?.isKit ?? false;
     final save = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -4927,12 +4948,115 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                   const SizedBox(height: 10),
                   TextField(
                     controller: description,
-                    maxLines: 2,
+                    maxLines: 4,
                     scrollPadding: const EdgeInsets.only(bottom: 190),
                     decoration: const InputDecoration(
                       labelText: 'Descripción para el cliente',
                       prefixIcon: Icon(Icons.description_outlined),
                     ),
+                  ),
+                  const SizedBox(height: 10),
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.fact_check_outlined,
+                      color: widget.brand.accentColor,
+                    ),
+                    title: const Text(
+                      'Añadir detalles del producto',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    subtitle: const Text(
+                      'Esta información aparecerá en “Ver detalles” para el cliente.',
+                    ),
+                    children: [
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: partNumber,
+                              scrollPadding: const EdgeInsets.only(bottom: 190),
+                              decoration: const InputDecoration(
+                                labelText: 'Número de pieza',
+                                prefixIcon: Icon(Icons.numbers_rounded),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: packageWeight,
+                              scrollPadding: const EdgeInsets.only(bottom: 190),
+                              decoration: const InputDecoration(
+                                labelText: 'Peso del paquete',
+                                hintText: 'Ej. 2.50 kg',
+                                prefixIcon: Icon(Icons.scale_outlined),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        initialValue: productCondition,
+                        decoration: const InputDecoration(
+                          labelText: 'Condición',
+                          prefixIcon: Icon(Icons.verified_outlined),
+                        ),
+                        items: const ['Nuevo', 'Usado', 'Reacondicionado']
+                            .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+                            .toList(),
+                        onChanged: (value) => setDialogState(
+                          () => productCondition = value ?? productCondition,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: origin,
+                              scrollPadding: const EdgeInsets.only(bottom: 190),
+                              decoration: const InputDecoration(
+                                labelText: 'Origen',
+                                hintText: 'Ej. Colombia, Asia',
+                                prefixIcon: Icon(Icons.public_outlined),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: oemCode,
+                              scrollPadding: const EdgeInsets.only(bottom: 190),
+                              decoration: const InputDecoration(
+                                labelText: 'Código OEM',
+                                prefixIcon: Icon(Icons.qr_code_2_rounded),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        value: includesPistons,
+                        title: const Text('Incluye pistones'),
+                        onChanged: (value) => setDialogState(() => includesPistons = value),
+                      ),
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        value: includesRings,
+                        title: const Text('Incluye aros'),
+                        onChanged: (value) => setDialogState(() => includesRings = value),
+                      ),
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        value: isKit,
+                        title: const Text('Es un kit'),
+                        onChanged: (value) => setDialogState(() => isKit = value),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   SwitchListTile.adaptive(
@@ -5009,6 +5133,14 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
               brand: productBrand,
               barcode: normalizedBarcode,
               sku: sku.text.trim(),
+              partNumber: partNumber.text.trim(),
+              packageWeight: packageWeight.text.trim(),
+              productCondition: productCondition,
+              origin: origin.text.trim(),
+              oemCode: oemCode.text.trim(),
+              includesPistons: includesPistons,
+              includesRings: includesRings,
+              isKit: isKit,
               category: category,
               description: description.text.trim(),
               costPriceCents: current?.costPriceCents ?? 0,
@@ -5036,6 +5168,10 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
     barcode.dispose();
     sku.dispose();
     description.dispose();
+    partNumber.dispose();
+    packageWeight.dispose();
+    origin.dispose();
+    oemCode.dispose();
     cost.dispose();
     price.dispose();
     stock.dispose();

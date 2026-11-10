@@ -16,6 +16,7 @@ import '../../core/client/appointment_calendar.dart';
 import '../../core/client/client_service_store.dart';
 import '../../core/client/local_client_profile_store.dart';
 import '../../core/commerce/commerce_models.dart';
+import '../../core/commerce/product_gallery.dart';
 import '../../core/commerce/commerce_receipt_service.dart';
 import '../../core/commerce/commerce_store.dart';
 import '../../core/networking/api_client.dart';
@@ -26,6 +27,7 @@ import '../access/role_access_screen.dart';
 import '../../core/workshops/workshop_feedback_store.dart';
 import '../auth/account_recovery_screen.dart';
 import '../auth/client_registration/client_registration_screen.dart';
+import '../settings/credential_settings_screen.dart';
 
 class ClientDashboardScreen extends StatefulWidget {
   const ClientDashboardScreen({
@@ -55,6 +57,7 @@ class _ClientSettingsScreen extends StatefulWidget {
     required this.workshop,
     required this.brand,
     required this.onEdit,
+    required this.onChangePassword,
     required this.onRecovery,
   });
 
@@ -62,6 +65,7 @@ class _ClientSettingsScreen extends StatefulWidget {
   final Workshop workshop;
   final WorkshopBrand brand;
   final VoidCallback onEdit;
+  final VoidCallback onChangePassword;
   final VoidCallback onRecovery;
 
   @override
@@ -288,7 +292,7 @@ class _ClientSettingsScreenState extends State<_ClientSettingsScreen> {
                           ),
                           const Divider(height: 1, color: Color(0xFF343A40)),
                           ListTile(
-                            onTap: widget.onRecovery,
+                            onTap: widget.onChangePassword,
                             leading: const Icon(Icons.key_outlined),
                             title: const Text('Cambiar contraseña'),
                             trailing: const Icon(Icons.chevron_right_rounded),
@@ -470,7 +474,7 @@ class _PartsPage extends StatefulWidget {
   final Workshop workshop;
   final String clientId;
   final String clientName;
-  final VoidCallback onOpenSupport;
+  final ValueChanged<CommerceProduct> onOpenSupport;
 
   @override
   State<_PartsPage> createState() => _PartsPageState();
@@ -783,19 +787,27 @@ class _PartsPageState extends State<_PartsPage> {
                               child: SizedBox(
                                 width: double.infinity,
                                 child: previewPhoto != null
-                                    ? ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: ColoredBox(
-                                          color: const Color(0xFF101317),
-                                          child: Image.memory(
-                                            previewPhoto,
-                                            width: double.infinity,
-                                            height: double.infinity,
-                                            fit: BoxFit.contain,
-                                            errorBuilder: (_, _, _) => Icon(
-                                              _productIcon(part.category),
-                                              color: widget.accent,
-                                              size: 52,
+                                    ? GestureDetector(
+                                        onTap: () => showProductGallery(
+                                          context,
+                                          photos: part.photos,
+                                          accent: widget.accent,
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: ColoredBox(
+                                            color: const Color(0xFF101317),
+                                            child: Image.memory(
+                                              previewPhoto,
+                                              width: double.infinity,
+                                              height: double.infinity,
+                                              fit: BoxFit.contain,
+                                              filterQuality: FilterQuality.high,
+                                              errorBuilder: (_, _, _) => Icon(
+                                                _productIcon(part.category),
+                                                color: widget.accent,
+                                                size: 52,
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -924,7 +936,13 @@ class _PartsPageState extends State<_PartsPage> {
                 child: ListView(
                   padding: const EdgeInsets.all(20),
                   children: [
-                    SizedBox(
+                    GestureDetector(
+                      onTap: () => showProductGallery(
+                        sheetContext,
+                        photos: photos,
+                        accent: widget.accent,
+                      ),
+                      child: SizedBox(
                       height: 310,
                       child: photos.isEmpty
                           ? Center(
@@ -934,13 +952,12 @@ class _PartsPageState extends State<_PartsPage> {
                                 size: 92,
                               ),
                             )
-                          : PageView.builder(
-                              itemCount: photos.length,
-                              itemBuilder: (_, index) => Image.memory(
-                                photos[index],
-                                fit: BoxFit.contain,
-                              ),
+                          : Image.memory(
+                              photos.first,
+                              fit: BoxFit.contain,
+                              filterQuality: FilterQuality.high,
                             ),
+                    ),
                     ),
                     if (photos.length > 1)
                       Padding(
@@ -984,11 +1001,20 @@ class _PartsPageState extends State<_PartsPage> {
                           ? 'Sin descripción adicional.'
                           : product.description,
                     ),
+                    const SizedBox(height: 14),
+                    OutlinedButton.icon(
+                      onPressed: () => _showFullProductDetails(
+                        sheetContext,
+                        product,
+                      ),
+                      icon: const Icon(Icons.article_outlined),
+                      label: const Text('Ver detalles del producto'),
+                    ),
                     const SizedBox(height: 20),
                     OutlinedButton.icon(
                       onPressed: () {
                         Navigator.pop(sheetContext);
-                        widget.onOpenSupport();
+                        widget.onOpenSupport(product);
                       },
                       icon: const Icon(Icons.chat_bubble_outline_rounded),
                       label: const Text('Preguntar al taller'),
@@ -1008,6 +1034,69 @@ class _PartsPageState extends State<_PartsPage> {
                       icon: const Icon(Icons.shopping_cart_checkout_rounded),
                       label: const Text('Elegir cantidad y comprar'),
                     ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showFullProductDetails(
+    BuildContext context,
+    CommerceProduct product,
+  ) async {
+    final rows = <(String, String)>[
+      ('Marca', product.brand.isEmpty ? 'No especificada' : product.brand),
+      if (product.partNumber.isNotEmpty)
+        ('Número de pieza', product.partNumber),
+      if (product.sku.isNotEmpty) ('Referencia / SKU', product.sku),
+      if (product.packageWeight.isNotEmpty)
+        ('Peso del paquete', product.packageWeight),
+      ('Condición', product.productCondition),
+      if (product.origin.isNotEmpty) ('Origen', product.origin),
+      if (product.oemCode.isNotEmpty) ('Código OEM', product.oemCode),
+      ('Incluye pistones', product.includesPistons ? 'Sí' : 'No'),
+      ('Incluye aros', product.includesRings ? 'Sí' : 'No'),
+      ('Es kit', product.isKit ? 'Sí' : 'No'),
+    ];
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1A1E23),
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * .82,
+          child: ListView(
+            padding: const EdgeInsets.all(22),
+            children: [
+              const _Handle(),
+              const SizedBox(height: 18),
+              const Text('Detalles del producto', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 16),
+              Text(product.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 18),
+              const Text('Descripción', style: TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              Text(product.description.isEmpty ? 'El taller no agregó una descripción adicional.' : product.description),
+              const SizedBox(height: 24),
+              const Text('Características principales', style: TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 10),
+              Container(
+                decoration: BoxDecoration(border: Border.all(color: const Color(0xFF3E454D)), borderRadius: BorderRadius.circular(12)),
+                child: Column(
+                  children: [
+                    for (var index = 0; index < rows.length; index++)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                        color: index.isOdd ? const Color(0xFF22272D) : null,
+                        child: Row(children: [
+                          Expanded(child: Text(rows[index].$1, style: const TextStyle(fontWeight: FontWeight.w700))),
+                          Expanded(child: Text(rows[index].$2, textAlign: TextAlign.right)),
+                        ]),
+                      ),
                   ],
                 ),
               ),
@@ -1252,10 +1341,12 @@ class _SupportPage extends StatefulWidget {
     required this.workshop,
     required this.accent,
     required this.profile,
+    this.productQuestion,
   });
   final Workshop workshop;
   final Color accent;
   final ClientProfile profile;
+  final CommerceProduct? productQuestion;
 
   @override
   State<_SupportPage> createState() => _SupportPageState();
@@ -1269,6 +1360,7 @@ class _SupportPageState extends State<_SupportPage> {
   List<LocalChatMessage> _localMessages = const [];
   String? _conversationId;
   bool _connecting = false;
+  String? _sentProductQuestionId;
 
   @override
   void initState() {
@@ -1276,6 +1368,14 @@ class _SupportPageState extends State<_SupportPage> {
     LocalChatStore.revision.addListener(_localChatChanged);
     _loadLocalMessages();
     _connectConversation();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SupportPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.productQuestion?.id != oldWidget.productQuestion?.id) {
+      _sendProductQuestionWhenReady();
+    }
   }
 
   @override
@@ -1304,7 +1404,10 @@ class _SupportPageState extends State<_SupportPage> {
       final id = await _chatRepository.openConversation(
         workshopId: widget.workshop.id,
       );
-      if (mounted) setState(() => _conversationId = id);
+      if (mounted) {
+        setState(() => _conversationId = id);
+        _sendProductQuestionWhenReady();
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1318,6 +1421,25 @@ class _SupportPageState extends State<_SupportPage> {
     } finally {
       if (mounted) setState(() => _connecting = false);
     }
+  }
+
+  Future<void> _sendProductQuestionWhenReady() async {
+    final product = widget.productQuestion;
+    final conversationId = _conversationId;
+    if (product == null || conversationId == null || _sentProductQuestionId == product.id) {
+      return;
+    }
+    _sentProductQuestionId = product.id;
+    final reference = product.partNumber.isNotEmpty
+        ? product.partNumber
+        : product.sku.isNotEmpty
+        ? product.sku
+        : product.barcode;
+    final text = 'Tengo una pregunta sobre el producto: ${product.name}'
+        '${product.brand.isEmpty ? '' : ' · ${product.brand}'}'
+        '${reference.isEmpty ? '' : ' · Referencia: $reference'}.';
+    _controller.text = text;
+    await _send();
   }
 
   @override
@@ -3055,6 +3177,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
   List<ClientMotorcycle> _motorcycles = const [];
   List<ClientAppointment> _appointments = const [];
   var _tab = 0;
+  CommerceProduct? _productQuestion;
   var _loading = true;
 
   String get _clientId =>
@@ -3243,12 +3366,16 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
                   workshop: widget.workshop,
                   clientId: _clientId,
                   clientName: _profile.fullName,
-                  onOpenSupport: () => setState(() => _tab = 4),
+                  onOpenSupport: (product) => setState(() {
+                    _productQuestion = product;
+                    _tab = 4;
+                  }),
                 ),
                 _SupportPage(
                   workshop: widget.workshop,
                   accent: accent,
                   profile: _profile,
+                  productQuestion: _productQuestion,
                 ),
               ],
             ),
@@ -4771,6 +4898,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
             await _editProfile();
           },
           onRecovery: _openRecovery,
+          onChangePassword: _openChangePassword,
         ),
       ),
     );
@@ -4782,6 +4910,17 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
         builder: (_) => AccountRecoveryScreen(
           accountType: RecoveryAccountType.client,
           initialEmail: _profile.email,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openChangePassword() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CredentialSettingsScreen(
+          brand: widget.brand,
+          passwordOnly: true,
         ),
       ),
     );
