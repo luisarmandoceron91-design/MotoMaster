@@ -798,18 +798,19 @@ class _PartsPageState extends State<_PartsPage> {
                                         ),
                                         child: ClipRRect(
                                           borderRadius: BorderRadius.circular(8),
-                                          child: ColoredBox(
-                                            color: const Color(0xFF101317),
+                                          child: SizedBox.expand(
                                             child: Image.memory(
                                               previewPhoto,
-                                              width: double.infinity,
-                                              height: double.infinity,
-                                              fit: BoxFit.contain,
+                                              fit: BoxFit.cover,
+                                              alignment: Alignment.center,
                                               filterQuality: FilterQuality.high,
-                                              errorBuilder: (_, _, _) => Icon(
-                                                _productIcon(part.category),
-                                                color: widget.accent,
-                                                size: 52,
+                                              errorBuilder: (_, _, _) => ColoredBox(
+                                                color: const Color(0xFF101317),
+                                                child: Icon(
+                                                  _productIcon(part.category),
+                                                  color: widget.accent,
+                                                  size: 52,
+                                                ),
                                               ),
                                             ),
                                           ),

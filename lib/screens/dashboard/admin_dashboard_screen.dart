@@ -4088,10 +4088,9 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             AspectRatio(
-              // Marco uniforme, alto y de ancho completo. Se respeta la foto
-              // completa (sin recortes ni deformación) para que el repuesto se
-              // vea grande y claro, igual en todas las publicaciones.
-              aspectRatio: .92,
+              // Igual que una tarjeta de catálogo moderna: foto cuadrada de
+              // borde a borde, sin franjas ni márgenes alrededor.
+              aspectRatio: 1,
               child: Container(
                 color: const Color(0xFF101214),
                 child: product.imageBytes != null
@@ -4101,13 +4100,13 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                           photos: product.photos,
                           accent: widget.brand.accentColor,
                         ),
-                        child: Image.memory(
-                          product.imageBytes!,
-                          width: double.infinity,
-                          height: double.infinity,
-                          fit: BoxFit.contain,
-                          alignment: Alignment.center,
-                          filterQuality: FilterQuality.high,
+                        child: SizedBox.expand(
+                          child: Image.memory(
+                            product.imageBytes!,
+                            fit: BoxFit.cover,
+                            alignment: Alignment.center,
+                            filterQuality: FilterQuality.high,
+                          ),
                         ),
                       )
                     : Center(
