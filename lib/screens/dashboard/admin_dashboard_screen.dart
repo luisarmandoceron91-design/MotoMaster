@@ -406,7 +406,8 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
     (Icons.groups_2_rounded, 'Clientes', 'Directorio e historial'),
     (Icons.engineering_rounded, 'Mecánicos', 'Equipo y disponibilidad'),
     (Icons.category_rounded, 'Repuestos', 'Catálogo publicado para clientes'),
-    (Icons.inventory_2_rounded, 'Inventario', 'Existencias, ventas y facturas'),
+    (Icons.point_of_sale_rounded, 'Ventas', 'Ventas locales, virtuales y facturas'),
+    (Icons.inventory_2_rounded, 'Inventario', 'Existencias y movimientos'),
     (Icons.star_rounded, 'Calificaciones', 'Experiencia del cliente'),
   ];
 
@@ -660,7 +661,12 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
         brand: brand,
         catalogOnly: true,
       ),
-      6 => _WorkshopCommercePanel(workshopId: widget.workshopId, brand: brand),
+      6 => _WorkshopCommercePanel(
+        workshopId: widget.workshopId,
+        brand: brand,
+        salesOnly: true,
+      ),
+      7 => _WorkshopCommercePanel(workshopId: widget.workshopId, brand: brand),
       _ => _WorkshopFeedbackPanel(workshopId: widget.workshopId, brand: brand),
     };
     final padding = _preferences.compactMode ? 14.0 : 24.0;
@@ -1030,7 +1036,7 @@ class _WorkshopOverviewState extends State<_WorkshopOverview> {
                       : data.rating.toStringAsFixed(1),
                   detail: '${data.ratingCount} opiniones recibidas',
                   color: const Color(0xFFFFB020),
-                  onTap: () => widget.onOpenSection(7),
+                  onTap: () => widget.onOpenSection(8),
                 ),
               ];
               return GridView.count(
@@ -1228,7 +1234,7 @@ class _OperationsSummary extends StatelessWidget {
           title: 'Productos con bajo stock',
           value: '${data.lowStock}',
           color: const Color(0xFFFFB020),
-          onTap: () => onOpenSection(6),
+          onTap: () => onOpenSection(7),
         ),
         _OperationRow(
           icon: Icons.forum_outlined,
@@ -3684,10 +3690,12 @@ class _WorkshopCommercePanel extends StatefulWidget {
     required this.workshopId,
     required this.brand,
     this.catalogOnly = false,
+    this.salesOnly = false,
   });
   final String workshopId;
   final WorkshopBrand brand;
   final bool catalogOnly;
+  final bool salesOnly;
 
   @override
   State<_WorkshopCommercePanel> createState() => _WorkshopCommercePanelState();
@@ -3759,6 +3767,8 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
   @override
   Widget build(BuildContext context) => widget.catalogOnly
       ? _partsCatalog()
+      : widget.salesOnly
+      ? _salesDashboard()
       : Container(
           width: double.infinity,
           padding: const EdgeInsets.all(18),
@@ -3788,7 +3798,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: const [
                             Text(
-                              'Inventario, ventas y facturación',
+                              'Inventario y facturación',
                               style: TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.w900,
@@ -3796,7 +3806,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                             ),
                             SizedBox(height: 3),
                             Text(
-                              'Controla existencias, registra ventas, pedidos y movimientos.',
+                              'Controla existencias, pedidos y movimientos del taller.',
                               style: TextStyle(
                                 color: Color(0xFFBFC2C7),
                                 fontSize: 12,
@@ -3812,11 +3822,6 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                     icon: const Icon(Icons.add_rounded),
                     label: const Text('Registrar producto'),
                   );
-                  final newSale = OutlinedButton.icon(
-                    onPressed: _openPointOfSale,
-                    icon: const Icon(Icons.point_of_sale_rounded),
-                    label: const Text('Nueva venta'),
-                  );
                   if (compact) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3826,7 +3831,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: [addProduct, newSale],
+                          children: [addProduct],
                         ),
                       ],
                     );
@@ -3835,8 +3840,6 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                     children: [
                       Expanded(child: heading),
                       addProduct,
-                      const SizedBox(width: 8),
-                      newSale,
                     ],
                   );
                 },
@@ -3858,16 +3861,11 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                       ),
                       ButtonSegment(
                         value: 1,
-                        icon: Icon(Icons.point_of_sale_outlined),
-                        label: Text('Ventas'),
-                      ),
-                      ButtonSegment(
-                        value: 2,
                         icon: Icon(Icons.shopping_bag_outlined),
                         label: Text('Pedidos web'),
                       ),
                       ButtonSegment(
-                        value: 3,
+                        value: 2,
                         icon: Icon(Icons.history_rounded),
                         label: Text('Movimientos'),
                       ),
@@ -3880,9 +3878,8 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                 ),
                 const SizedBox(height: 16),
                 if (_section == 0) _inventorySection(),
-                if (_section == 1) _salesSection(),
-                if (_section == 2) _onlineOrdersSection(),
-                if (_section == 3) _movementsSection(),
+                if (_section == 1) _onlineOrdersSection(),
+                if (_section == 2) _movementsSection(),
               ],
             ],
           ),
@@ -4091,10 +4088,13 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             AspectRatio(
-              aspectRatio: 1.45,
+              // Marco uniforme, alto y de ancho completo. Se respeta la foto
+              // completa (sin recortes ni deformación) para que el repuesto se
+              // vea grande y claro, igual en todas las publicaciones.
+              aspectRatio: .92,
               child: Container(
                 color: const Color(0xFF101214),
-              child: product.imageBytes != null
+                child: product.imageBytes != null
                     ? InkWell(
                         onTap: () => showProductGallery(
                           context,
@@ -4103,7 +4103,10 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                         ),
                         child: Image.memory(
                           product.imageBytes!,
+                          width: double.infinity,
+                          height: double.infinity,
                           fit: BoxFit.contain,
+                          alignment: Alignment.center,
                           filterQuality: FilterQuality.high,
                         ),
                       )
@@ -4425,6 +4428,95 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
         ),
       ],
     ),
+  );
+
+  Widget _salesDashboard() {
+    final now = DateTime.now();
+    final dayStart = DateTime(now.year, now.month, now.day);
+    final weekStart = dayStart.subtract(Duration(days: dayStart.weekday - 1));
+    final monthStart = DateTime(now.year, now.month);
+    int localSince(DateTime start) => _sales
+        .where((sale) => !sale.createdAt.isBefore(start))
+        .fold(0, (total, sale) => total + sale.totalCents);
+    int onlineSince(DateTime start) => _orders
+        .where((order) => order.paid && !order.createdAt.isBefore(start))
+        .fold(0, (total, order) => total + order.subtotalCents);
+    int totalSince(DateTime start) => localSince(start) + onlineSince(start);
+    final today = totalSince(dayStart);
+    final week = totalSince(weekStart);
+    final month = totalSince(monthStart);
+    final completedOnline = _orders.where((order) => order.paid).toList();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xE8191B1F),
+        border: Border.all(color: widget.brand.accentColor.withValues(alpha: .45)),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) => constraints.maxWidth < 620
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [_salesHeading(), const SizedBox(height: 12), _newSaleButton()],
+                  )
+                : Row(children: [Expanded(child: _salesHeading()), _newSaleButton()]),
+          ),
+          const SizedBox(height: 18),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _CommerceSummaryChip(icon: Icons.today_outlined, label: 'Hoy ${commerceMoney(today)}', color: widget.brand.accentColor),
+              _CommerceSummaryChip(icon: Icons.date_range_outlined, label: 'Semana ${commerceMoney(week)}', color: const Color(0xFF4AA8FF)),
+              _CommerceSummaryChip(icon: Icons.calendar_month_outlined, label: 'Mes ${commerceMoney(month)}', color: const Color(0xFF20C77A)),
+              _CommerceSummaryChip(icon: Icons.storefront_outlined, label: '${_sales.length} locales', color: const Color(0xFFFFB020)),
+              _CommerceSummaryChip(icon: Icons.language_rounded, label: '${completedOnline.length} virtuales', color: const Color(0xFFBB86FC)),
+            ],
+          ),
+          const SizedBox(height: 22),
+          const Text('Ventas en el local', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          if (_sales.isEmpty)
+            const _CommerceEmptyMessage(icon: Icons.point_of_sale_outlined, message: 'Aún no hay ventas presenciales registradas.')
+          else
+            for (final sale in _sales.take(30)) _saleRow(sale),
+          const SizedBox(height: 18),
+          Text('Ventas virtuales (${completedOnline.length})', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          if (completedOnline.isEmpty)
+            const _CommerceEmptyMessage(icon: Icons.shopping_bag_outlined, message: 'Aún no hay ventas virtuales aprobadas.')
+          else
+            for (final order in completedOnline.take(30)) _orderRow(order),
+        ],
+      ),
+    );
+  }
+
+  Widget _salesHeading() => Row(
+    children: [
+      Icon(Icons.point_of_sale_rounded, color: widget.brand.accentColor),
+      const SizedBox(width: 10),
+      const Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Ventas', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+            SizedBox(height: 3),
+            Text('Control diario, semanal y mensual de ventas locales y virtuales.', style: TextStyle(color: Color(0xFFBFC2C7), fontSize: 12)),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  Widget _newSaleButton() => FilledButton.icon(
+    onPressed: _openPointOfSale,
+    icon: const Icon(Icons.add_shopping_cart_rounded),
+    label: const Text('Nueva venta'),
   );
 
   Widget _salesSection() => Column(
@@ -4947,6 +5039,17 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                   ),
                   const SizedBox(height: 10),
                   TextField(
+                    controller: stock,
+                    keyboardType: TextInputType.number,
+                    scrollPadding: const EdgeInsets.only(bottom: 190),
+                    decoration: const InputDecoration(
+                      labelText: 'Unidades disponibles *',
+                      helperText: 'Esta cantidad será la que vean y puedan comprar los clientes.',
+                      prefixIcon: Icon(Icons.inventory_2_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
                     controller: description,
                     maxLines: 4,
                     scrollPadding: const EdgeInsets.only(bottom: 190),
@@ -5101,11 +5204,12 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
       final productName = name.text.trim();
       final productBrand = brand.text.trim();
       final salePrice = int.tryParse(price.text) ?? 0;
-      if (productName.isEmpty || productBrand.isEmpty || salePrice <= 0) {
+      final availableUnits = int.tryParse(stock.text) ?? -1;
+      if (productName.isEmpty || productBrand.isEmpty || salePrice <= 0 || availableUnits < 0) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Completa nombre, marca y precio de venta.'),
+              content: Text('Completa nombre, marca, precio de venta y unidades disponibles.'),
             ),
           );
         }
@@ -5145,9 +5249,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
               description: description.text.trim(),
               costPriceCents: current?.costPriceCents ?? 0,
               priceCents: salePrice * 100,
-              // El catálogo público no obliga a administrar bodega. Los
-              // productos nuevos se publican con una unidad disponible.
-              stock: current?.stock ?? 1,
+              stock: availableUnits,
               minimumStock: current?.minimumStock ?? 0,
               supplier: current?.supplier ?? '',
               location: current?.location ?? '',

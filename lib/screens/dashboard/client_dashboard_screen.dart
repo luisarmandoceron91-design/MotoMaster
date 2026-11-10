@@ -783,7 +783,10 @@ class _PartsPageState extends State<_PartsPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
-                              flex: 6,
+                              // Da prioridad a la foto: ocupa más de la mitad
+                              // del recuadro y todas las tarjetas conservan la
+                              // misma proporción en el catálogo.
+                              flex: 7,
                               child: SizedBox(
                                 width: double.infinity,
                                 child: previewPhoto != null
@@ -823,7 +826,7 @@ class _PartsPageState extends State<_PartsPage> {
                             ),
                             const SizedBox(height: 12),
                             Expanded(
-                              flex: 4,
+                              flex: 3,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
