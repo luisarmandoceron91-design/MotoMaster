@@ -754,10 +754,10 @@ class _PartsPageState extends State<_PartsPage> {
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
                   childAspectRatio: constraints.maxWidth > 900
-                      ? .82
+                      ? .70
                       : constraints.maxWidth > 560
-                      ? .95
-                      : .75,
+                      ? .82
+                      : .68,
                 ),
                 itemBuilder: (_, index) {
                   final part = visible[index];
@@ -778,100 +778,110 @@ class _PartsPageState extends State<_PartsPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            SizedBox(
-                              height: constraints.maxWidth > 560 ? 150 : 190,
-                              child: Center(
+                            Expanded(
+                              flex: 6,
+                              child: SizedBox(
+                                width: double.infinity,
                                 child: previewPhoto != null
                                     ? ClipRRect(
                                         borderRadius: BorderRadius.circular(8),
-                                        child: ClipRect(
-                                          child: Transform.scale(
-                                            scale: 1.30,
-                                            child: Image.memory(
-                                              previewPhoto,
-                                              width: double.infinity,
-                                              height: double.infinity,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (_, _, _) => Icon(
-                                                _productIcon(part.category),
-                                                color: widget.accent,
-                                                size: 52,
-                                              ),
+                                        child: ColoredBox(
+                                          color: const Color(0xFF101317),
+                                          child: Image.memory(
+                                            previewPhoto,
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                            fit: BoxFit.contain,
+                                            errorBuilder: (_, _, _) => Icon(
+                                              _productIcon(part.category),
+                                              color: widget.accent,
+                                              size: 52,
                                             ),
                                           ),
                                         ),
                                       )
-                                    : Icon(
-                                        _productIcon(part.category),
-                                        color: widget.accent,
-                                        size: 52,
+                                    : Center(
+                                        child: Icon(
+                                          _productIcon(part.category),
+                                          color: widget.accent,
+                                          size: 52,
+                                        ),
                                       ),
                               ),
                             ),
-                            Text(
-                              part.category.toUpperCase(),
-                              style: TextStyle(
-                                color: widget.accent,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              part.name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            if (part.brand.isNotEmpty) ...[
-                              const SizedBox(height: 3),
-                              Text(
-                                part.brand,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Color(0xFFB8BDC4),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 5),
-                            Text(
-                              commerceMoney(part.priceCents),
-                              style: TextStyle(
-                                color: widget.accent,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              part.stock > 0
-                                  ? '${part.stock} disponibles'
-                                  : 'Agotado',
-                              style: TextStyle(
-                                color: part.stock > 0
-                                    ? const Color(0xFF43D99B)
-                                    : const Color(0xFFFF6670),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            SizedBox(
-                              width: double.infinity,
-                              child: FilledButton(
-                                onPressed: part.available
-                                    ? () => _checkout(part)
-                                    : null,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: widget.accent,
-                                  foregroundColor: Colors.black,
-                                ),
-                                child: const Text('Comprar'),
+                            const SizedBox(height: 12),
+                            Expanded(
+                              flex: 4,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    part.category.toUpperCase(),
+                                    style: TextStyle(
+                                      color: widget.accent,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    part.name,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  if (part.brand.isNotEmpty) ...[
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      part.brand,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Color(0xFFB8BDC4),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    commerceMoney(part.priceCents),
+                                    style: TextStyle(
+                                      color: widget.accent,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    part.stock > 0
+                                        ? '${part.stock} disponibles'
+                                        : 'Agotado',
+                                    style: TextStyle(
+                                      color: part.stock > 0
+                                          ? const Color(0xFF43D99B)
+                                          : const Color(0xFFFF6670),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: FilledButton(
+                                      onPressed: part.available
+                                          ? () => _checkout(part)
+                                          : null,
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: widget.accent,
+                                        foregroundColor: Colors.black,
+                                      ),
+                                      child: const Text('Comprar'),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -1119,9 +1129,7 @@ class _PartsPageState extends State<_PartsPage> {
                       const SizedBox(width: 8),
                       IconButton.filledTonal(
                         tooltip: 'Sumar una unidad',
-                        onPressed: quantity < product.stock
-                            ? () => setModalState(() => quantity++)
-                            : null,
+                        onPressed: () => setModalState(() => quantity++),
                         icon: const Icon(Icons.add_rounded),
                       ),
                     ],
@@ -1450,7 +1458,12 @@ class _SupportPageState extends State<_SupportPage> {
                             ),
                           for (final message in _messages) ...[
                             if (message.bytes != null)
-                              _LocalChatAttachment(message: message),
+                              _LocalChatAttachment(
+                                message: message,
+                                onDelete: () => setState(
+                                  () => _messages.remove(message),
+                                ),
+                              ),
                             if (message.text.isNotEmpty)
                               _Bubble(text: message.text, own: true),
                           ],
@@ -1749,9 +1762,10 @@ class _SupportPageState extends State<_SupportPage> {
 }
 
 class _LocalChatAttachment extends StatelessWidget {
-  const _LocalChatAttachment({required this.message});
+  const _LocalChatAttachment({required this.message, required this.onDelete});
 
   final _ChatEntry message;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1768,8 +1782,12 @@ class _LocalChatAttachment extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: const Color(0xFF414850)),
         ),
-        child: isImage
-            ? InkWell(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            isImage
+                ? InkWell(
                 borderRadius: BorderRadius.circular(5),
                 onTap: () => ChatAttachmentActions.openImageBytes(
                   context,
@@ -1785,8 +1803,8 @@ class _LocalChatAttachment extends StatelessWidget {
                     fit: BoxFit.cover,
                   ),
                 ),
-              )
-            : Padding(
+                  )
+                : Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1796,7 +1814,15 @@ class _LocalChatAttachment extends StatelessWidget {
                     Flexible(child: Text(fileName)),
                   ],
                 ),
-              ),
+                  ),
+            TextButton.icon(
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline_rounded, size: 17),
+              label: const Text('Eliminar archivo'),
+              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1896,9 +1922,65 @@ class _RemoteChatEntry extends StatelessWidget {
                     ),
             ),
           ),
-        if (body.isNotEmpty) _Bubble(text: body, own: own),
+        if (own && attachmentPath.isNotEmpty)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => _confirmDeleteMessage(context, attachmentPath),
+              icon: const Icon(Icons.delete_outline_rounded, size: 17),
+              label: const Text('Eliminar archivo'),
+              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            ),
+          ),
+        if (body.isNotEmpty) ...[
+          _Bubble(text: body, own: own),
+          if (own)
+            TextButton.icon(
+              onPressed: () => _confirmDeleteMessage(context, null),
+              icon: const Icon(Icons.delete_outline_rounded, size: 17),
+              label: const Text('Eliminar mensaje'),
+              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            ),
+        ],
       ],
     );
+  }
+
+  Future<void> _confirmDeleteMessage(
+    BuildContext context,
+    String? attachmentPath,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('¿Eliminar mensaje?'),
+        content: const Text('Se eliminará para ambas personas del chat.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await repository.deleteOwnMessage(
+        messageId: message['id'].toString(),
+        attachmentPath: attachmentPath,
+      );
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No fue posible eliminar el mensaje.')),
+        );
+      }
+    }
   }
 }
 

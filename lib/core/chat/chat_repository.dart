@@ -126,6 +126,30 @@ class ChatRepository {
     }
   }
 
+  /// El emisor puede retirar un mensaje con archivo que envió por error.
+  /// La política de Supabase valida nuevamente que el mensaje le pertenece.
+  Future<void> deleteOwnMessage({
+    required String messageId,
+    String? attachmentPath,
+  }) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw StateError('Debes iniciar sesión.');
+    final deleted = await _client
+        .from('messages')
+        .delete()
+        .eq('id', messageId)
+        .eq('sender_id', user.id)
+        .select('attachment_path');
+    if (deleted.isEmpty) {
+      throw StateError('No tienes permiso para eliminar este mensaje.');
+    }
+    final path = deleted.first['attachment_path']?.toString().trim();
+    final safePath = path?.isNotEmpty == true ? path : attachmentPath?.trim();
+    if (safePath != null && safePath.isNotEmpty) {
+      await _client.storage.from('chat-attachments').remove([safePath]);
+    }
+  }
+
   Future<String> signedAttachmentUrl(String path) =>
       _client.storage.from('chat-attachments').createSignedUrl(path, 3600);
 }

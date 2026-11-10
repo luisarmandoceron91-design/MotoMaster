@@ -63,9 +63,13 @@ class LocalClientProfileStore {
       'phone': profile.phone,
       'department': profile.department,
       'city': profile.city,
-      'photo_file_name': profile.profilePhotoFileName,
+      // Conservar la copia local si se actualizaron otros datos del perfil.
+      // La foto principal vive en Supabase, pero esta copia permite verla
+      // mientras se restablece una conexión o se renueva la URL firmada.
+      'photo_file_name':
+          profile.profilePhotoFileName ?? previous['photo_file_name'],
       'photo_bytes': profile.profilePhotoBytes == null
-          ? null
+          ? previous['photo_bytes']
           : base64Encode(profile.profilePhotoBytes!),
     };
     await _writeAccounts(preferences, accounts);

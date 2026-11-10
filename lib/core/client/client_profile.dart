@@ -46,6 +46,8 @@ class ClientProfile {
   factory ClientProfile.fromDatabase(
     Map<String, dynamic> data, {
     String? avatarUrl,
+    Uint8List? profilePhotoBytes,
+    String? profilePhotoFileName,
   }) {
     return ClientProfile(
       userId: data['user_id'] as String?,
@@ -54,6 +56,8 @@ class ClientProfile {
       phone: data['phone'] as String? ?? '',
       department: data['department'] as String? ?? '',
       city: data['city'] as String? ?? '',
+      profilePhotoBytes: profilePhotoBytes,
+      profilePhotoFileName: profilePhotoFileName,
       avatarPath: data['avatar_path'] as String?,
       avatarUrl: avatarUrl,
     );

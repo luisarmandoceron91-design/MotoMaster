@@ -295,7 +295,7 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
         await _auth.signOut();
         throw const AuthException('Esta cuenta no corresponde a un cliente.');
       }
-      final profile = ClientProfile(
+      final sessionProfile = ClientProfile(
         userId: user.id,
         fullName: metadata['full_name']?.toString() ?? 'Cliente',
         email: user.email ?? _email.text.trim().toLowerCase(),
@@ -303,8 +303,11 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
         department: metadata['department']?.toString() ?? '',
         city: metadata['city']?.toString() ?? '',
       );
+      // Cargar el perfil definitivo antes de navegar. De esta forma la foto
+      // guardada en Storage se conserva al cerrar y volver a iniciar sesión.
+      final profile = await _profiles.getCurrentProfile() ?? sessionProfile;
+      await _localProfiles.save(profile);
       _openWorkshopSelection(profile);
-      unawaited(_refreshProfileCache());
     } on AuthException {
       if (mounted) setState(() => _error = 'Correo o contraseña incorrectos.');
     } catch (error) {

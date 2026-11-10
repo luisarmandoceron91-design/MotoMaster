@@ -2676,6 +2676,16 @@ class _AdminCloudMessage extends StatelessWidget {
               );
             },
           ),
+        if (own && path.isNotEmpty)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => _confirmDeleteMessage(context, path),
+              icon: const Icon(Icons.delete_outline_rounded, size: 17),
+              label: const Text('Eliminar archivo'),
+              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            ),
+          ),
         if (body.isNotEmpty) ...[
           if (path.isNotEmpty) const SizedBox(height: 8),
           GestureDetector(
@@ -2692,9 +2702,53 @@ class _AdminCloudMessage extends StatelessWidget {
               style: TextStyle(color: own ? Colors.black : Colors.white),
             ),
           ),
+          if (own)
+            TextButton.icon(
+              onPressed: () => _confirmDeleteMessage(context, null),
+              icon: const Icon(Icons.delete_outline_rounded, size: 17),
+              label: const Text('Eliminar mensaje'),
+              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            ),
         ],
       ],
     );
+  }
+
+  Future<void> _confirmDeleteMessage(
+    BuildContext context,
+    String? attachmentPath,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('¿Eliminar mensaje?'),
+        content: const Text('Se eliminará para ambas personas del chat.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await repository.deleteOwnMessage(
+        messageId: message['id'].toString(),
+        attachmentPath: attachmentPath,
+      );
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No fue posible eliminar el mensaje.')),
+        );
+      }
+    }
   }
 }
 
@@ -3269,15 +3323,78 @@ class _WorkshopClientsPanelState extends State<_WorkshopClientsPanel> {
                     ),
                   ),
                 ),
+        if (mine && path.isNotEmpty)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => _confirmDeleteCloudMessage(
+                message,
+                repository,
+                path,
+              ),
+              icon: const Icon(Icons.delete_outline_rounded, size: 17),
+              label: const Text('Eliminar archivo'),
+              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            ),
+          ),
         if (body.isNotEmpty) ...[
           if (path.isNotEmpty) const SizedBox(height: 8),
           Text(
             body,
             style: TextStyle(color: mine ? Colors.black : Colors.white),
           ),
+          if (mine)
+            TextButton.icon(
+              onPressed: () => _confirmDeleteCloudMessage(
+                message,
+                repository,
+                null,
+              ),
+              icon: const Icon(Icons.delete_outline_rounded, size: 17),
+              label: const Text('Eliminar mensaje'),
+              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            ),
         ],
       ],
     );
+  }
+
+  Future<void> _confirmDeleteCloudMessage(
+    Map<String, dynamic> message,
+    ChatRepository repository,
+    String? attachmentPath,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('¿Eliminar mensaje?'),
+        content: const Text('Se eliminará para ambas personas del chat.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await repository.deleteOwnMessage(
+        messageId: message['id'].toString(),
+        attachmentPath: attachmentPath,
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No fue posible eliminar el mensaje.')),
+        );
+      }
+    }
   }
 
   Future<void> _removeClient(WorkshopClientRecord client) async {

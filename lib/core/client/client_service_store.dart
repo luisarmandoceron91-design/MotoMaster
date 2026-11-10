@@ -187,6 +187,24 @@ class ClientServiceStore {
     String clientId,
   ) async {
     final preferences = await SharedPreferences.getInstance();
+    final cloud = _cloudClient(workshopId, clientId);
+    if (cloud != null) {
+      try {
+        final rows = await cloud
+            .from('motorcycles')
+            .select()
+            .eq('owner_id', clientId)
+            .eq('workshop_id', workshopId)
+            .order('created_at');
+        final items = (rows as List)
+            .map((row) => _motorcycleFromCloud(Map<String, dynamic>.from(row)))
+            .toList();
+        await _saveMotorcycles(preferences, workshopId, clientId, items);
+        return items;
+      } catch (_) {
+        // La copia local se usa solo como respaldo cuando la red no responde.
+      }
+    }
     final encoded = preferences.getString(
       'client_motorcycles_${_scope(workshopId, clientId)}',
     );
@@ -210,16 +228,42 @@ class ClientServiceStore {
   ) async {
     final preferences = await SharedPreferences.getInstance();
     final items = [...await listMotorcycles(workshopId, clientId)];
-    final index = items.indexWhere((item) => item.id == motorcycle.id);
-    if (index < 0) {
-      items.add(motorcycle);
-    } else {
-      items[index] = motorcycle;
+    var saved = motorcycle;
+    final cloud = _cloudClient(workshopId, clientId);
+    if (cloud != null) {
+      try {
+        final payload = <String, dynamic>{
+          'owner_id': clientId,
+          'workshop_id': workshopId,
+          'brand': motorcycle.brand.trim(),
+          'model': motorcycle.model.trim(),
+          'plate': motorcycle.plate.trim(),
+          'model_year': int.tryParse(motorcycle.year),
+          'color': motorcycle.color.trim(),
+        };
+        final row = _isUuid(motorcycle.id)
+            ? await cloud
+                  .from('motorcycles')
+                  .update(payload)
+                  .eq('id', motorcycle.id)
+                  .select()
+                  .single()
+            : await cloud.from('motorcycles').insert(payload).select().single();
+        saved = _motorcycleFromCloud(Map<String, dynamic>.from(row));
+      } catch (_) {
+        // No se descarta lo digitado: queda como copia local temporal.
+      }
     }
-    await preferences.setString(
-      'client_motorcycles_${_scope(workshopId, clientId)}',
-      jsonEncode(items.map((item) => item.toMap()).toList()),
+    final index = items.indexWhere(
+      (item) => item.id == motorcycle.id || item.plate == motorcycle.plate,
     );
+    if (index < 0) {
+      items.add(saved);
+    } else {
+      items[index] = saved;
+    }
+    await _saveMotorcycles(preferences, workshopId, clientId, items);
+    revision.value++;
   }
 
   Future<List<ClientAppointment>> listAppointments(
@@ -227,6 +271,25 @@ class ClientServiceStore {
     String clientId,
   ) async {
     final preferences = await SharedPreferences.getInstance();
+    final cloud = _cloudClient(workshopId, clientId);
+    if (cloud != null) {
+      try {
+        final rows = await cloud
+            .from('appointments')
+            .select()
+            .eq('workshop_id', workshopId)
+            .eq('client_id', clientId)
+            .order('scheduled_at');
+        final items = (rows as List)
+            .map((row) => _appointmentFromCloud(Map<String, dynamic>.from(row)))
+            .toList();
+        await _saveAppointments(preferences, workshopId, clientId, items);
+        await _mergeGlobalAppointments(preferences, items);
+        return items;
+      } catch (_) {
+        // Continúa con la última copia local si la nube no está disponible.
+      }
+    }
     final encoded = preferences.getString(
       'client_appointments_${_scope(workshopId, clientId)}',
     );
@@ -268,6 +331,9 @@ class ClientServiceStore {
             .insert({
               'workshop_id': workshopId,
               'client_id': clientId,
+              'motorcycle_id': _isUuid(saved.motorcycleId)
+                  ? saved.motorcycleId
+                  : null,
               'scheduled_at': _scheduledAt(saved).toUtc().toIso8601String(),
               'service_type': saved.serviceType,
               'motorcycle_name': saved.motorcycleName,
@@ -393,6 +459,23 @@ class ClientServiceStore {
     String workshopId,
   ) async {
     final preferences = await SharedPreferences.getInstance();
+    final cloud = _cloudClient(workshopId, null);
+    if (cloud != null) {
+      try {
+        final rows = await cloud
+            .from('appointments')
+            .select()
+            .eq('workshop_id', workshopId)
+            .order('scheduled_at');
+        final items = (rows as List)
+            .map((row) => _appointmentFromCloud(Map<String, dynamic>.from(row)))
+            .toList();
+        await _mergeGlobalAppointments(preferences, items);
+        return items;
+      } catch (_) {
+        // Se muestra el último estado descargado si falla la conexión.
+      }
+    }
     final items = await _listGlobalAppointments(preferences);
     return items.where((item) => item.workshopId == workshopId).toList()
       ..sort((a, b) => a.date.compareTo(b.date));
@@ -410,6 +493,17 @@ class ClientServiceStore {
       mechanicName: mechanicName,
       updatedAt: DateTime.now(),
     );
+    final cloud = _cloudClient(appointment.workshopId, null);
+    if (cloud != null && _isUuid(appointment.id)) {
+      try {
+        await cloud.from('appointments').update({
+          'service_stage': updated.serviceStage,
+          'mechanic_name': updated.mechanicName,
+        }).eq('id', updated.id);
+      } catch (_) {
+        // La copia local evita perder el cambio mientras se reintenta.
+      }
+    }
     final global = await _listGlobalAppointments(preferences);
     final globalIndex = global.indexWhere((item) => item.id == appointment.id);
     if (globalIndex >= 0) global[globalIndex] = updated;
@@ -476,6 +570,77 @@ class ClientServiceStore {
     _globalAppointmentsKey,
     jsonEncode(items.map((item) => item.toMap()).toList()),
   );
+
+  Future<void> _saveMotorcycles(
+    SharedPreferences preferences,
+    String workshopId,
+    String clientId,
+    List<ClientMotorcycle> items,
+  ) => preferences.setString(
+    'client_motorcycles_${_scope(workshopId, clientId)}',
+    jsonEncode(items.map((item) => item.toMap()).toList()),
+  );
+
+  Future<void> _saveAppointments(
+    SharedPreferences preferences,
+    String workshopId,
+    String clientId,
+    List<ClientAppointment> items,
+  ) => preferences.setString(
+    'client_appointments_${_scope(workshopId, clientId)}',
+    jsonEncode(items.map((item) => item.toMap()).toList()),
+  );
+
+  Future<void> _mergeGlobalAppointments(
+    SharedPreferences preferences,
+    List<ClientAppointment> items,
+  ) async {
+    final global = await _listGlobalAppointments(preferences);
+    for (final item in items) {
+      global.removeWhere((existing) => existing.id == item.id);
+      global.add(item);
+    }
+    await _saveGlobalAppointments(preferences, global);
+  }
+
+  ClientMotorcycle _motorcycleFromCloud(Map<String, dynamic> row) =>
+      ClientMotorcycle(
+        id: row['id']?.toString() ?? '',
+        brand: row['brand']?.toString() ?? '',
+        model: row['model']?.toString() ?? '',
+        plate: row['plate']?.toString() ?? '',
+        year: row['model_year']?.toString() ?? '',
+        color: row['color']?.toString() ?? '',
+      );
+
+  ClientAppointment _appointmentFromCloud(Map<String, dynamic> row) {
+    final scheduled = DateTime.tryParse(row['scheduled_at']?.toString() ?? '');
+    return ClientAppointment(
+      id: row['id']?.toString() ?? '',
+      motorcycleId: row['motorcycle_id']?.toString() ?? '',
+      motorcycleName: row['motorcycle_name']?.toString() ?? '',
+      serviceType: row['service_type']?.toString() ?? '',
+      date: scheduled?.toLocal() ?? DateTime.now(),
+      time: scheduled == null
+          ? ''
+          : '${scheduled.toLocal().hour.toString().padLeft(2, '0')}:${scheduled.toLocal().minute.toString().padLeft(2, '0')}',
+      notes: row['reason']?.toString() ?? '',
+      status: _appointmentStatus(row['status']?.toString()),
+      workshopId: row['workshop_id']?.toString() ?? '',
+      clientId: row['client_id']?.toString() ?? '',
+      serviceStage: row['service_stage']?.toString() ?? 'Cita solicitada',
+      mechanicName: row['mechanic_name']?.toString() ?? '',
+      updatedAt: DateTime.tryParse(row['updated_at']?.toString() ?? ''),
+    );
+  }
+
+  String _appointmentStatus(String? value) => switch (value) {
+    'cancelled' => 'Cancelada',
+    'confirmed' => 'Confirmada',
+    'in_progress' => 'En proceso',
+    'completed' => 'Completada',
+    _ => 'Solicitada',
+  };
 
   bool _sameDay(DateTime left, DateTime right) =>
       left.year == right.year &&

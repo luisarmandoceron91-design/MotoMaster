@@ -21,10 +21,8 @@ class ClientProfileRepository {
         .eq('user_id', user.id)
         .maybeSingle();
     if (data == null) return null;
-    final avatarPath = data['avatar_path'] as String?;
-    final avatarUrl = avatarPath == null
-        ? null
-        : await _client.storage.from(_bucket).createSignedUrl(avatarPath, 3600);
+    final avatarPath = data['avatar_path']?.toString().trim();
+    final avatarUrl = await _signedAvatarUrl(avatarPath);
     return ClientProfile.fromDatabase(data, avatarUrl: avatarUrl);
   }
 
@@ -39,7 +37,14 @@ class ClientProfileRepository {
   }) async {
     final user = _client.auth.currentUser;
     if (user == null) throw StateError('Debes iniciar sesión.');
-    String? avatarPath;
+    final previous = await _client
+        .from('profiles')
+        .select('avatar_path')
+        .eq('user_id', user.id)
+        .maybeSingle();
+    // Una edición de nombre, teléfono o ubicación no debe borrar la foto
+    // que el cliente ya había guardado en la nube.
+    String? avatarPath = previous?['avatar_path']?.toString().trim();
     if (photoBytes != null) {
       final extension = _safeExtension(photoFileName);
       avatarPath = '${user.id}/avatar.$extension';
@@ -67,11 +72,26 @@ class ClientProfileRepository {
         }, onConflict: 'user_id')
         .select()
         .single();
-    final storedPath = data['avatar_path'] as String?;
-    final avatarUrl = storedPath == null
-        ? null
-        : await _client.storage.from(_bucket).createSignedUrl(storedPath, 3600);
-    return ClientProfile.fromDatabase(data, avatarUrl: avatarUrl);
+    final storedPath = data['avatar_path']?.toString().trim();
+    final avatarUrl = await _signedAvatarUrl(storedPath);
+    return ClientProfile.fromDatabase(
+      data,
+      avatarUrl: avatarUrl,
+      profilePhotoBytes: photoBytes,
+      profilePhotoFileName: photoFileName,
+    );
+  }
+
+  Future<String?> _signedAvatarUrl(String? avatarPath) async {
+    if (avatarPath == null || avatarPath.isEmpty) return null;
+    try {
+      return await _client.storage
+          .from(_bucket)
+          .createSignedUrl(avatarPath, 3600);
+    } catch (_) {
+      // El resto del perfil sigue disponible incluso ante una red momentánea.
+      return null;
+    }
   }
 
   String _safeExtension(String? fileName) {
