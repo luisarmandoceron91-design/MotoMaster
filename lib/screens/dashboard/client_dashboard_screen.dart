@@ -167,11 +167,18 @@ class _ClientSettingsScreenState extends State<_ClientSettingsScreen> {
                                     ? MemoryImage(
                                         widget.profile.profilePhotoBytes!,
                                       )
-                                    : (widget.profile.avatarUrl?.trim().isNotEmpty ?? false)
+                                    : (widget.profile.avatarUrl
+                                              ?.trim()
+                                              .isNotEmpty ??
+                                          false)
                                     ? NetworkImage(widget.profile.avatarUrl!)
                                     : null,
-                                child: widget.profile.profilePhotoBytes == null &&
-                                        !(widget.profile.avatarUrl?.trim().isNotEmpty ?? false)
+                                child:
+                                    widget.profile.profilePhotoBytes == null &&
+                                        !(widget.profile.avatarUrl
+                                                ?.trim()
+                                                .isNotEmpty ??
+                                            false)
                                     ? Icon(
                                         Icons.person_rounded,
                                         color: accent,
@@ -798,21 +805,28 @@ class _PartsPageState extends State<_PartsPage> {
                                           accent: widget.accent,
                                         ),
                                         child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(8),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                           child: SizedBox.expand(
                                             child: Image.memory(
                                               previewPhoto,
                                               fit: BoxFit.cover,
                                               alignment: Alignment.center,
                                               filterQuality: FilterQuality.high,
-                                              errorBuilder: (_, _, _) => ColoredBox(
-                                                color: const Color(0xFF101317),
-                                                child: Icon(
-                                                  _productIcon(part.category),
-                                                  color: widget.accent,
-                                                  size: 52,
-                                                ),
-                                              ),
+                                              errorBuilder: (_, _, _) =>
+                                                  ColoredBox(
+                                                    color: const Color(
+                                                      0xFF101317,
+                                                    ),
+                                                    child: Icon(
+                                                      _productIcon(
+                                                        part.category,
+                                                      ),
+                                                      color: widget.accent,
+                                                      size: 52,
+                                                    ),
+                                                  ),
                                             ),
                                           ),
                                         ),
@@ -948,21 +962,21 @@ class _PartsPageState extends State<_PartsPage> {
                         accent: widget.accent,
                       ),
                       child: SizedBox(
-                      height: 310,
-                      child: photos.isEmpty
-                          ? Center(
-                              child: Icon(
-                                _productIcon(product.category),
-                                color: widget.accent,
-                                size: 92,
+                        height: 310,
+                        child: photos.isEmpty
+                            ? Center(
+                                child: Icon(
+                                  _productIcon(product.category),
+                                  color: widget.accent,
+                                  size: 92,
+                                ),
+                              )
+                            : Image.memory(
+                                photos.first,
+                                fit: BoxFit.contain,
+                                filterQuality: FilterQuality.high,
                               ),
-                            )
-                          : Image.memory(
-                              photos.first,
-                              fit: BoxFit.contain,
-                              filterQuality: FilterQuality.high,
-                            ),
-                    ),
+                      ),
                     ),
                     if (photos.length > 1)
                       Padding(
@@ -1008,10 +1022,8 @@ class _PartsPageState extends State<_PartsPage> {
                     ),
                     const SizedBox(height: 14),
                     OutlinedButton.icon(
-                      onPressed: () => _showFullProductDetails(
-                        sheetContext,
-                        product,
-                      ),
+                      onPressed: () =>
+                          _showFullProductDetails(sheetContext, product),
                       icon: const Icon(Icons.article_outlined),
                       label: const Text('Ver detalles del producto'),
                     ),
@@ -1079,28 +1091,67 @@ class _PartsPageState extends State<_PartsPage> {
             children: [
               const _Handle(),
               const SizedBox(height: 18),
-              const Text('Detalles del producto', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+              const Text(
+                'Detalles del producto',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+              ),
               const SizedBox(height: 16),
-              Text(product.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              Text(
+                product.name,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
               const SizedBox(height: 18),
-              const Text('Descripción', style: TextStyle(fontWeight: FontWeight.w900)),
+              const Text(
+                'Descripción',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
               const SizedBox(height: 8),
-              Text(product.description.isEmpty ? 'El taller no agregó una descripción adicional.' : product.description),
+              Text(
+                product.description.isEmpty
+                    ? 'El taller no agregó una descripción adicional.'
+                    : product.description,
+              ),
               const SizedBox(height: 24),
-              const Text('Características principales', style: TextStyle(fontWeight: FontWeight.w900)),
+              const Text(
+                'Características principales',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
               const SizedBox(height: 10),
               Container(
-                decoration: BoxDecoration(border: Border.all(color: const Color(0xFF3E454D)), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFF3E454D)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Column(
                   children: [
                     for (var index = 0; index < rows.length; index++)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 13,
+                        ),
                         color: index.isOdd ? const Color(0xFF22272D) : null,
-                        child: Row(children: [
-                          Expanded(child: Text(rows[index].$1, style: const TextStyle(fontWeight: FontWeight.w700))),
-                          Expanded(child: Text(rows[index].$2, textAlign: TextAlign.right)),
-                        ]),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                rows[index].$1,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                rows[index].$2,
+                                textAlign: TextAlign.right,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                   ],
                 ),
@@ -1392,6 +1443,11 @@ class _SupportPageState extends State<_SupportPage> {
 
   void _localChatChanged() => _loadLocalMessages();
 
+  void _chatNotice(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
   Future<void> _loadLocalMessages() async {
     final messages = await _localChatStore.listMessages(
       workshopId: widget.workshop.id,
@@ -1416,9 +1472,13 @@ class _SupportPageState extends State<_SupportPage> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'El chat seguirá disponible localmente hasta recuperar la conexión.',
+          SnackBar(
+            content: const Text(
+              'No se pudo conectar el chat con el taller. Inténtalo nuevamente.',
+            ),
+            action: SnackBarAction(
+              label: 'Reintentar',
+              onPressed: _connectConversation,
             ),
           ),
         );
@@ -1431,7 +1491,9 @@ class _SupportPageState extends State<_SupportPage> {
   Future<void> _sendProductQuestionWhenReady() async {
     final product = widget.productQuestion;
     final conversationId = _conversationId;
-    if (product == null || conversationId == null || _sentProductQuestionId == product.id) {
+    if (product == null ||
+        conversationId == null ||
+        _sentProductQuestionId == product.id) {
       return;
     }
     _sentProductQuestionId = product.id;
@@ -1440,7 +1502,8 @@ class _SupportPageState extends State<_SupportPage> {
         : product.sku.isNotEmpty
         ? product.sku
         : product.barcode;
-    final text = 'Tengo una pregunta sobre el producto: ${product.name}'
+    final text =
+        'Tengo una pregunta sobre el producto: ${product.name}'
         '${product.brand.isEmpty ? '' : ' · ${product.brand}'}'
         '${reference.isEmpty ? '' : ' · Referencia: $reference'}.';
     _controller.text = text;
@@ -1560,13 +1623,18 @@ class _SupportPageState extends State<_SupportPage> {
                                           message['sender_id'] ==
                                           _chatRepository.currentUserId,
                                     ),
-                                  for (final message in _localMessages.where(
-                                    (message) => !message.sentByClient,
-                                  ))
-                                    _Bubble(text: message.body, own: false),
                                 ],
                               );
                             },
+                          )
+                        else if (ApiClient.cloudEnabled)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 28),
+                            child: Text(
+                              'Estamos conectando tu conversación segura con el taller.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Color(0xFF9DA3AA)),
+                            ),
                           )
                         else ...[
                           if (_localMessages.isEmpty)
@@ -1587,9 +1655,8 @@ class _SupportPageState extends State<_SupportPage> {
                             if (message.bytes != null)
                               _LocalChatAttachment(
                                 message: message,
-                                onDelete: () => setState(
-                                  () => _messages.remove(message),
-                                ),
+                                onDelete: () =>
+                                    setState(() => _messages.remove(message)),
                               ),
                             if (message.text.isNotEmpty)
                               _Bubble(text: message.text, own: true),
@@ -1719,6 +1786,32 @@ class _SupportPageState extends State<_SupportPage> {
   Future<void> _send() async {
     final value = _controller.text.trim();
     if (value.isEmpty) return;
+    if (ApiClient.cloudEnabled) {
+      var conversationId = _conversationId;
+      if (conversationId == null) {
+        await _connectConversation();
+        conversationId = _conversationId;
+      }
+      if (conversationId == null) return;
+      try {
+        await _chatRepository.sendMessage(
+          conversationId: conversationId,
+          body: value,
+        );
+        _controller.clear();
+      } catch (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se pudo enviar. El mensaje sigue escrito para que lo intentes de nuevo.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     _controller.clear();
     await _localChatStore.sendClientMessage(
       workshopId: widget.workshop.id,
@@ -1727,25 +1820,6 @@ class _SupportPageState extends State<_SupportPage> {
       clientEmail: widget.profile.email,
       body: value,
     );
-    final conversationId = _conversationId;
-    if (conversationId != null) {
-      try {
-        await _chatRepository.sendMessage(
-          conversationId: conversationId,
-          body: value,
-        );
-        return;
-      } catch (_) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'No se pudo enviar. El mensaje quedó en este equipo.',
-            ),
-          ),
-        );
-      }
-    }
   }
 
   Future<void> _pickImage() async {
@@ -1756,6 +1830,28 @@ class _SupportPageState extends State<_SupportPage> {
     final file = result?.files.single;
     final bytes = file?.bytes;
     if (!mounted || file == null || bytes == null) return;
+    if (ApiClient.cloudEnabled) {
+      var conversationId = _conversationId;
+      if (conversationId == null) {
+        await _connectConversation();
+        conversationId = _conversationId;
+      }
+      if (conversationId == null) return;
+      try {
+        await _chatRepository.sendAttachment(
+          conversationId: conversationId,
+          bytes: bytes,
+          fileName: file.name,
+          mimeType: _mimeTypeForFile(file.name, image: true),
+        );
+        if (mounted) _chatNotice('Imagen enviada al taller.');
+      } catch (_) {
+        if (mounted) {
+          _chatNotice('No se pudo enviar la imagen. Inténtalo nuevamente.');
+        }
+      }
+      return;
+    }
     final conversationId = _conversationId;
     if (conversationId != null) {
       try {
@@ -1798,6 +1894,28 @@ class _SupportPageState extends State<_SupportPage> {
     if (!mounted || photo == null) return;
     final bytes = await photo.readAsBytes();
     final fileName = 'foto-${DateTime.now().millisecondsSinceEpoch}.jpg';
+    if (ApiClient.cloudEnabled) {
+      var conversationId = _conversationId;
+      if (conversationId == null) {
+        await _connectConversation();
+        conversationId = _conversationId;
+      }
+      if (conversationId == null) return;
+      try {
+        await _chatRepository.sendAttachment(
+          conversationId: conversationId,
+          bytes: bytes,
+          fileName: fileName,
+          mimeType: 'image/jpeg',
+        );
+        if (mounted) _chatNotice('Foto enviada al taller.');
+      } catch (_) {
+        if (mounted) {
+          _chatNotice('No se pudo enviar la foto. Inténtalo nuevamente.');
+        }
+      }
+      return;
+    }
     final conversationId = _conversationId;
     if (conversationId != null) {
       try {
@@ -1839,6 +1957,28 @@ class _SupportPageState extends State<_SupportPage> {
     final file = result?.files.single;
     final bytes = file?.bytes;
     if (!mounted || file == null || bytes == null) return;
+    if (ApiClient.cloudEnabled) {
+      var conversationId = _conversationId;
+      if (conversationId == null) {
+        await _connectConversation();
+        conversationId = _conversationId;
+      }
+      if (conversationId == null) return;
+      try {
+        await _chatRepository.sendAttachment(
+          conversationId: conversationId,
+          bytes: bytes,
+          fileName: file.name,
+          mimeType: _mimeTypeForFile(file.name),
+        );
+        if (mounted) _chatNotice('Documento enviado al taller.');
+      } catch (_) {
+        if (mounted) {
+          _chatNotice('No se pudo enviar el documento. Inténtalo nuevamente.');
+        }
+      }
+      return;
+    }
     final conversationId = _conversationId;
     if (conversationId != null) {
       try {
@@ -1915,32 +2055,32 @@ class _LocalChatAttachment extends StatelessWidget {
           children: [
             isImage
                 ? InkWell(
-                borderRadius: BorderRadius.circular(5),
-                onTap: () => ChatAttachmentActions.openImageBytes(
-                  context,
-                  bytes: message.bytes!,
-                  fileName: fileName,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(5),
-                  child: Image.memory(
-                    message.bytes!,
-                    width: 280,
-                    height: 155,
-                    fit: BoxFit.cover,
-                  ),
-                ),
+                    borderRadius: BorderRadius.circular(5),
+                    onTap: () => ChatAttachmentActions.openImageBytes(
+                      context,
+                      bytes: message.bytes!,
+                      fileName: fileName,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(5),
+                      child: Image.memory(
+                        message.bytes!,
+                        width: 280,
+                        height: 155,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
                   )
                 : Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.description_outlined),
-                    const SizedBox(width: 8),
-                    Flexible(child: Text(fileName)),
-                  ],
-                ),
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.description_outlined),
+                        const SizedBox(width: 8),
+                        Flexible(child: Text(fileName)),
+                      ],
+                    ),
                   ),
             TextButton.icon(
               onPressed: onDelete,
@@ -3294,7 +3434,22 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
           ],
         ),
         actions: [
-          AppNotificationsButton(color: widget.brand.accentColor),
+          AppNotificationsButton(
+            color: widget.brand.accentColor,
+            onOpen: (notification) {
+              final type = notification['type']?.toString() ?? '';
+              setState(() {
+                if (type == 'chat_message') {
+                  _tab = 4;
+                } else if (type.contains('appointment') ||
+                    type.contains('cita')) {
+                  _tab = 1;
+                } else if (type.contains('product') || type.contains('sale')) {
+                  _tab = 3;
+                }
+              });
+            },
+          ),
           PopupMenuButton<String>(
             tooltip: 'Cuenta',
             icon: _headerProfileAvatar(),
@@ -4915,10 +5070,8 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
   Future<void> _openChangePassword() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => CredentialSettingsScreen(
-          brand: widget.brand,
-          passwordOnly: true,
-        ),
+        builder: (_) =>
+            CredentialSettingsScreen(brand: widget.brand, passwordOnly: true),
       ),
     );
   }

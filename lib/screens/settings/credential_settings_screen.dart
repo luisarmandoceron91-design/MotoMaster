@@ -14,6 +14,7 @@ class CredentialSettingsScreen extends StatefulWidget {
   });
   final WorkshopBrand brand;
   final LocalWorkshopAdminStore? localAdminStore;
+
   /// Cuando se abre desde Perfil solo muestra el flujo claro y seguro para
   /// renovar la contraseña, sin confundirlo con recuperación de cuenta.
   final bool passwordOnly;
@@ -56,7 +57,11 @@ class _CredentialSettingsScreenState extends State<CredentialSettingsScreen> {
   Widget build(BuildContext context) {
     final accent = widget.brand.accentColor;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.passwordOnly ? 'Cambiar contraseña' : 'Credenciales de acceso')),
+      appBar: AppBar(
+        title: Text(
+          widget.passwordOnly ? 'Cambiar contraseña' : 'Credenciales de acceso',
+        ),
+      ),
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -92,7 +97,9 @@ class _CredentialSettingsScreenState extends State<CredentialSettingsScreen> {
                         ),
                         const SizedBox(height: 14),
                         Text(
-                          widget.passwordOnly ? 'Cambia tu contraseña' : 'Actualiza tus credenciales',
+                          widget.passwordOnly
+                              ? 'Cambia tu contraseña'
+                              : 'Actualiza tus credenciales',
                           style: TextStyle(
                             fontSize: 26,
                             fontWeight: FontWeight.w800,
@@ -144,7 +151,9 @@ class _CredentialSettingsScreenState extends State<CredentialSettingsScreen> {
                             ),
                             icon: const Icon(Icons.save_outlined),
                             label: Text(
-                              widget.passwordOnly ? 'Actualizar contraseña' : 'Guardar credenciales',
+                              widget.passwordOnly
+                                  ? 'Actualizar contraseña'
+                                  : 'Guardar credenciales',
                               style: TextStyle(fontWeight: FontWeight.w800),
                             ),
                           ),
@@ -203,7 +212,7 @@ class _CredentialSettingsScreenState extends State<CredentialSettingsScreen> {
   }
 }
 
-class _SettingsField extends StatelessWidget {
+class _SettingsField extends StatefulWidget {
   const _SettingsField({
     required this.controller,
     required this.label,
@@ -214,23 +223,42 @@ class _SettingsField extends StatelessWidget {
   final String label;
   final bool obscureText;
   final FormFieldValidator<String>? validator;
+
+  @override
+  State<_SettingsField> createState() => _SettingsFieldState();
+}
+
+class _SettingsFieldState extends State<_SettingsField> {
+  late bool _obscure = widget.obscureText;
+
   @override
   Widget build(BuildContext context) => TextFormField(
-    controller: controller,
-    obscureText: obscureText,
+    controller: widget.controller,
+    obscureText: _obscure,
     autocorrect: false,
-    enableSuggestions: !obscureText,
+    enableSuggestions: !widget.obscureText,
     decoration: InputDecoration(
-      labelText: label,
+      labelText: widget.label,
       filled: true,
       fillColor: const Color(0xFF24262B),
+      suffixIcon: widget.obscureText
+          ? IconButton(
+              tooltip: _obscure ? 'Mostrar contraseña' : 'Ocultar contraseña',
+              onPressed: () => setState(() => _obscure = !_obscure),
+              icon: Icon(
+                _obscure
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+              ),
+            )
+          : null,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(15),
         borderSide: BorderSide.none,
       ),
     ),
     validator:
-        validator ??
+        widget.validator ??
         (value) => value == null || value.isEmpty
             ? 'Este campo es obligatorio.'
             : null,

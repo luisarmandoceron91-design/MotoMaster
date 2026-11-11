@@ -407,7 +407,11 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
     (Icons.groups_2_rounded, 'Clientes', 'Directorio e historial'),
     (Icons.engineering_rounded, 'Mecánicos', 'Equipo y disponibilidad'),
     (Icons.category_rounded, 'Repuestos', 'Catálogo publicado para clientes'),
-    (Icons.point_of_sale_rounded, 'Ventas', 'Ventas locales, virtuales y facturas'),
+    (
+      Icons.point_of_sale_rounded,
+      'Ventas',
+      'Ventas locales, virtuales y facturas',
+    ),
     (Icons.inventory_2_rounded, 'Inventario', 'Existencias y movimientos'),
     (Icons.star_rounded, 'Calificaciones', 'Experiencia del cliente'),
   ];
@@ -505,7 +509,26 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
             ],
           ),
           actions: [
-            AppNotificationsButton(color: brand.accentColor),
+            AppNotificationsButton(
+              color: brand.accentColor,
+              onOpen: (notification) {
+                final type = notification['type']?.toString() ?? '';
+                setState(() {
+                  if (type == 'chat_message') {
+                    _selected = 2;
+                  } else if (type.contains('appointment') ||
+                      type.contains('cita')) {
+                    _selected = 1;
+                  } else if (type.contains('rating') ||
+                      type.contains('calificacion')) {
+                    _selected = 8;
+                  } else if (type.contains('sale') ||
+                      type.contains('product')) {
+                    _selected = 6;
+                  }
+                });
+              },
+            ),
             IconButton(
               tooltip: 'Personalización del taller',
               onPressed: _openPersonalization,
@@ -2141,69 +2164,72 @@ class _WorkshopChatPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 14),
-        ValueListenableBuilder<int>(
-          valueListenable: LocalChatStore.revision,
-          builder: (context, _, _) =>
-              FutureBuilder<List<LocalChatConversation>>(
-                future: LocalChatStore().listConversations(workshopId),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return LinearProgressIndicator(color: brand.accentColor);
-                  }
-                  final conversations = snapshot.data!;
-                  if (conversations.isEmpty) {
-                    return const Text(
-                      'Todavía no hay conversaciones con clientes.',
-                      style: TextStyle(color: Color(0xFFBFC2C7)),
-                    );
-                  }
-                  return Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      for (final conversation in conversations)
-                        SizedBox(
-                          width: 320,
-                          child: ListTile(
-                            tileColor: const Color(0xFF22252A),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              side: const BorderSide(color: Color(0xFF3A3E45)),
-                            ),
-                            leading: CircleAvatar(
-                              backgroundColor: brand.accentColor.withValues(
-                                alpha: .15,
+        if (!ApiClient.cloudEnabled)
+          ValueListenableBuilder<int>(
+            valueListenable: LocalChatStore.revision,
+            builder: (context, _, _) =>
+                FutureBuilder<List<LocalChatConversation>>(
+                  future: LocalChatStore().listConversations(workshopId),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return LinearProgressIndicator(color: brand.accentColor);
+                    }
+                    final conversations = snapshot.data!;
+                    if (conversations.isEmpty) {
+                      return const Text(
+                        'Todavía no hay conversaciones con clientes.',
+                        style: TextStyle(color: Color(0xFFBFC2C7)),
+                      );
+                    }
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        for (final conversation in conversations)
+                          SizedBox(
+                            width: 320,
+                            child: ListTile(
+                              tileColor: const Color(0xFF22252A),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                side: const BorderSide(
+                                  color: Color(0xFF3A3E45),
+                                ),
                               ),
-                              foregroundColor: brand.accentColor,
-                              child: Text(
-                                conversation.clientName.trim().isEmpty
-                                    ? 'C'
-                                    : conversation.clientName
-                                          .trim()[0]
-                                          .toUpperCase(),
+                              leading: CircleAvatar(
+                                backgroundColor: brand.accentColor.withValues(
+                                  alpha: .15,
+                                ),
+                                foregroundColor: brand.accentColor,
+                                child: Text(
+                                  conversation.clientName.trim().isEmpty
+                                      ? 'C'
+                                      : conversation.clientName
+                                            .trim()[0]
+                                            .toUpperCase(),
+                                ),
                               ),
-                            ),
-                            title: Text(
-                              conversation.clientName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
+                              title: Text(
+                                conversation.clientName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
+                              subtitle: Text(
+                                conversation.lastMessage,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: const Icon(Icons.chevron_right_rounded),
+                              onTap: () =>
+                                  _openLocalConversation(context, conversation),
                             ),
-                            subtitle: Text(
-                              conversation.lastMessage,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            trailing: const Icon(Icons.chevron_right_rounded),
-                            onTap: () =>
-                                _openLocalConversation(context, conversation),
                           ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-        ),
+                      ],
+                    );
+                  },
+                ),
+          ),
         if (ApiClient.cloudEnabled) ...[
           const SizedBox(height: 18),
           const Divider(),
@@ -2840,12 +2866,7 @@ class _WorkshopClientsPanelState extends State<_WorkshopClientsPanel> {
       );
 
   Future<void> _openClientChat(WorkshopClientRecord client) async {
-    final localMessages = await _chatStore.listMessages(
-      workshopId: widget.workshopId,
-      clientEmail: client.email,
-    );
-    if (!mounted) return;
-    if (localMessages.isNotEmpty || !ApiClient.cloudEnabled) {
+    if (!ApiClient.cloudEnabled) {
       await _openLocalClientChat(client);
       return;
     }
@@ -2859,7 +2880,13 @@ class _WorkshopClientsPanelState extends State<_WorkshopClientsPanel> {
       await _openCloudClientChat(client, repository, conversationId);
     } catch (_) {
       if (!mounted) return;
-      await _openLocalClientChat(client);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pudo abrir el historial en la nube. Inténtalo nuevamente.',
+          ),
+        ),
+      );
     }
   }
 
@@ -3324,11 +3351,8 @@ class _WorkshopClientsPanelState extends State<_WorkshopClientsPanel> {
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
-              onPressed: () => _confirmDeleteCloudMessage(
-                message,
-                repository,
-                path,
-              ),
+              onPressed: () =>
+                  _confirmDeleteCloudMessage(message, repository, path),
               icon: const Icon(Icons.delete_outline_rounded, size: 17),
               label: const Text('Eliminar archivo'),
               style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
@@ -3342,11 +3366,8 @@ class _WorkshopClientsPanelState extends State<_WorkshopClientsPanel> {
           ),
           if (mine)
             TextButton.icon(
-              onPressed: () => _confirmDeleteCloudMessage(
-                message,
-                repository,
-                null,
-              ),
+              onPressed: () =>
+                  _confirmDeleteCloudMessage(message, repository, null),
               icon: const Icon(Icons.delete_outline_rounded, size: 17),
               label: const Text('Eliminar mensaje'),
               style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
@@ -3817,11 +3838,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                       children: [
                         heading,
                         const SizedBox(height: 14),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [addProduct],
-                        ),
+                        Wrap(spacing: 8, runSpacing: 8, children: [addProduct]),
                       ],
                     );
                   }
@@ -4439,7 +4456,9 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: const Color(0xE8191B1F),
-        border: Border.all(color: widget.brand.accentColor.withValues(alpha: .45)),
+        border: Border.all(
+          color: widget.brand.accentColor.withValues(alpha: .45),
+        ),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
@@ -4449,34 +4468,75 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
             builder: (context, constraints) => constraints.maxWidth < 620
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [_salesHeading(), const SizedBox(height: 12), _newSaleButton()],
+                    children: [
+                      _salesHeading(),
+                      const SizedBox(height: 12),
+                      _newSaleButton(),
+                    ],
                   )
-                : Row(children: [Expanded(child: _salesHeading()), _newSaleButton()]),
+                : Row(
+                    children: [
+                      Expanded(child: _salesHeading()),
+                      _newSaleButton(),
+                    ],
+                  ),
           ),
           const SizedBox(height: 18),
           Wrap(
             spacing: 10,
             runSpacing: 10,
             children: [
-              _CommerceSummaryChip(icon: Icons.today_outlined, label: 'Hoy ${commerceMoney(today)}', color: widget.brand.accentColor),
-              _CommerceSummaryChip(icon: Icons.date_range_outlined, label: 'Semana ${commerceMoney(week)}', color: const Color(0xFF4AA8FF)),
-              _CommerceSummaryChip(icon: Icons.calendar_month_outlined, label: 'Mes ${commerceMoney(month)}', color: const Color(0xFF20C77A)),
-              _CommerceSummaryChip(icon: Icons.storefront_outlined, label: '${_sales.length} locales', color: const Color(0xFFFFB020)),
-              _CommerceSummaryChip(icon: Icons.language_rounded, label: '${completedOnline.length} virtuales', color: const Color(0xFFBB86FC)),
+              _CommerceSummaryChip(
+                icon: Icons.today_outlined,
+                label: 'Hoy ${commerceMoney(today)}',
+                color: widget.brand.accentColor,
+              ),
+              _CommerceSummaryChip(
+                icon: Icons.date_range_outlined,
+                label: 'Semana ${commerceMoney(week)}',
+                color: const Color(0xFF4AA8FF),
+              ),
+              _CommerceSummaryChip(
+                icon: Icons.calendar_month_outlined,
+                label: 'Mes ${commerceMoney(month)}',
+                color: const Color(0xFF20C77A),
+              ),
+              _CommerceSummaryChip(
+                icon: Icons.storefront_outlined,
+                label: '${_sales.length} locales',
+                color: const Color(0xFFFFB020),
+              ),
+              _CommerceSummaryChip(
+                icon: Icons.language_rounded,
+                label: '${completedOnline.length} virtuales',
+                color: const Color(0xFFBB86FC),
+              ),
             ],
           ),
           const SizedBox(height: 22),
-          const Text('Ventas en el local', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+          const Text(
+            'Ventas en el local',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+          ),
           const SizedBox(height: 8),
           if (_sales.isEmpty)
-            const _CommerceEmptyMessage(icon: Icons.point_of_sale_outlined, message: 'Aún no hay ventas presenciales registradas.')
+            const _CommerceEmptyMessage(
+              icon: Icons.point_of_sale_outlined,
+              message: 'Aún no hay ventas presenciales registradas.',
+            )
           else
             for (final sale in _sales.take(30)) _saleRow(sale),
           const SizedBox(height: 18),
-          Text('Ventas virtuales (${completedOnline.length})', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+          Text(
+            'Ventas virtuales (${completedOnline.length})',
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+          ),
           const SizedBox(height: 8),
           if (completedOnline.isEmpty)
-            const _CommerceEmptyMessage(icon: Icons.shopping_bag_outlined, message: 'Aún no hay ventas virtuales aprobadas.')
+            const _CommerceEmptyMessage(
+              icon: Icons.shopping_bag_outlined,
+              message: 'Aún no hay ventas virtuales aprobadas.',
+            )
           else
             for (final order in completedOnline.take(30)) _orderRow(order),
         ],
@@ -4492,9 +4552,15 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Ventas', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+            Text(
+              'Ventas',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+            ),
             SizedBox(height: 3),
-            Text('Control diario, semanal y mensual de ventas locales y virtuales.', style: TextStyle(color: Color(0xFFBFC2C7), fontSize: 12)),
+            Text(
+              'Control diario, semanal y mensual de ventas locales y virtuales.',
+              style: TextStyle(color: Color(0xFFBFC2C7), fontSize: 12),
+            ),
           ],
         ),
       ),
@@ -4803,7 +4869,9 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
     final sku = TextEditingController(text: current?.sku ?? '');
     final description = TextEditingController(text: current?.description ?? '');
     final partNumber = TextEditingController(text: current?.partNumber ?? '');
-    final packageWeight = TextEditingController(text: current?.packageWeight ?? '');
+    final packageWeight = TextEditingController(
+      text: current?.packageWeight ?? '',
+    );
     final origin = TextEditingController(text: current?.origin ?? '');
     final oemCode = TextEditingController(text: current?.oemCode ?? '');
     final cost = TextEditingController(
@@ -5032,7 +5100,8 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                     scrollPadding: const EdgeInsets.only(bottom: 190),
                     decoration: const InputDecoration(
                       labelText: 'Unidades disponibles *',
-                      helperText: 'Esta cantidad será la que vean y puedan comprar los clientes.',
+                      helperText:
+                          'Esta cantidad será la que vean y puedan comprar los clientes.',
                       prefixIcon: Icon(Icons.inventory_2_outlined),
                     ),
                   ),
@@ -5096,7 +5165,12 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                           prefixIcon: Icon(Icons.verified_outlined),
                         ),
                         items: const ['Nuevo', 'Usado', 'Reacondicionado']
-                            .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+                            .map(
+                              (value) => DropdownMenuItem(
+                                value: value,
+                                child: Text(value),
+                              ),
+                            )
                             .toList(),
                         onChanged: (value) => setDialogState(
                           () => productCondition = value ?? productCondition,
@@ -5133,19 +5207,22 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                         contentPadding: EdgeInsets.zero,
                         value: includesPistons,
                         title: const Text('Incluye pistones'),
-                        onChanged: (value) => setDialogState(() => includesPistons = value),
+                        onChanged: (value) =>
+                            setDialogState(() => includesPistons = value),
                       ),
                       SwitchListTile.adaptive(
                         contentPadding: EdgeInsets.zero,
                         value: includesRings,
                         title: const Text('Incluye aros'),
-                        onChanged: (value) => setDialogState(() => includesRings = value),
+                        onChanged: (value) =>
+                            setDialogState(() => includesRings = value),
                       ),
                       SwitchListTile.adaptive(
                         contentPadding: EdgeInsets.zero,
                         value: isKit,
                         title: const Text('Es un kit'),
-                        onChanged: (value) => setDialogState(() => isKit = value),
+                        onChanged: (value) =>
+                            setDialogState(() => isKit = value),
                       ),
                     ],
                   ),
@@ -5193,11 +5270,16 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
       final productBrand = brand.text.trim();
       final salePrice = int.tryParse(price.text) ?? 0;
       final availableUnits = int.tryParse(stock.text) ?? -1;
-      if (productName.isEmpty || productBrand.isEmpty || salePrice <= 0 || availableUnits < 0) {
+      if (productName.isEmpty ||
+          productBrand.isEmpty ||
+          salePrice <= 0 ||
+          availableUnits < 0) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Completa nombre, marca, precio de venta y unidades disponibles.'),
+              content: Text(
+                'Completa nombre, marca, precio de venta y unidades disponibles.',
+              ),
             ),
           );
         }

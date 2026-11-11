@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -5,9 +7,10 @@ import '../networking/api_client.dart';
 
 /// Bandeja compartida en la nube para avisos relevantes de la cuenta.
 class AppNotificationsButton extends StatefulWidget {
-  const AppNotificationsButton({super.key, this.color});
+  const AppNotificationsButton({super.key, this.color, this.onOpen});
 
   final Color? color;
+  final FutureOr<void> Function(Map<String, dynamic> notification)? onOpen;
 
   @override
   State<AppNotificationsButton> createState() => _AppNotificationsButtonState();
@@ -38,38 +41,101 @@ class _AppNotificationsButtonState extends State<AppNotificationsButton> {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      backgroundColor: const Color(0xFF1B1E23),
-      builder: (_) => SafeArea(
-        child: SizedBox(
-          height: 420,
-          child: items.isEmpty
-              ? const Center(
-                  child: Text('Todo está al día.', style: TextStyle(color: Colors.white70)),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                  itemCount: items.length + 1,
-                  separatorBuilder: (_, index) => const Divider(height: 1),
-                  itemBuilder: (_, index) {
-                    if (index == 0) {
-                      return const Padding(
-                        padding: EdgeInsets.only(bottom: 10),
-                        child: Text('Notificaciones', style: TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800)),
-                      );
-                    }
-                    final item = items[index - 1];
-                    final created = DateTime.tryParse(item['created_at']?.toString() ?? '')?.toLocal();
-                    final when = created == null
-                        ? ''
-                        : '${created.day.toString().padLeft(2, '0')}/${created.month.toString().padLeft(2, '0')} · ${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}';
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(item['type'] == 'chat_message' ? Icons.forum_rounded : Icons.notifications_active_outlined, color: widget.color ?? const Color(0xFFFF6A00)),
-                      title: Text(item['title']?.toString() ?? 'Nueva notificación', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-                      subtitle: Text('${item['body'] ?? ''}${when.isEmpty ? '' : '\n$when'}', maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFFB6BBC4))),
-                    );
-                  },
-                ),
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Container(
+              height: 500,
+              margin: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1B1E23),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFF363B44)),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black54, blurRadius: 28),
+                ],
+              ),
+              child: items.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Todo está al día.',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                      itemCount: items.length + 1,
+                      itemBuilder: (_, index) {
+                        if (index == 0) {
+                          return const Padding(
+                            padding: EdgeInsets.fromLTRB(4, 0, 4, 14),
+                            child: Text(
+                              'Notificaciones',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 21,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          );
+                        }
+                        final item = items[index - 1];
+                        final created = DateTime.tryParse(
+                          item['created_at']?.toString() ?? '',
+                        )?.toLocal();
+                        final when = created == null
+                            ? ''
+                            : '${created.day.toString().padLeft(2, '0')}/${created.month.toString().padLeft(2, '0')} · ${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}';
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF24282F),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: ListTile(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            leading: CircleAvatar(
+                              backgroundColor:
+                                  (widget.color ?? const Color(0xFFFF6A00))
+                                      .withValues(alpha: .16),
+                              child: Icon(
+                                item['type'] == 'chat_message'
+                                    ? Icons.forum_rounded
+                                    : Icons.notifications_active_outlined,
+                                color: widget.color ?? const Color(0xFFFF6A00),
+                              ),
+                            ),
+                            title: Text(
+                              item['title']?.toString() ?? 'Nueva notificación',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            subtitle: Text(
+                              '${item['body'] ?? ''}${when.isEmpty ? '' : '\n$when'}',
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Color(0xFFB6BBC4)),
+                            ),
+                            trailing: const Icon(
+                              Icons.chevron_right_rounded,
+                              color: Colors.white70,
+                            ),
+                            onTap: () async {
+                              Navigator.of(sheetContext).pop();
+                              await widget.onOpen?.call(item);
+                            },
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ),
         ),
       ),
     );

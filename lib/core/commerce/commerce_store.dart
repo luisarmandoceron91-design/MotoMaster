@@ -40,7 +40,17 @@ class CommerceStore {
       await _saveProducts(all);
     }
     if (ApiClient.cloudEnabled && ApiClient().client.auth.currentUser != null) {
+      final localForWorkshop = all
+          .where((item) => item.workshopId == workshopId)
+          .toList(growable: false);
       try {
+        // Respalda publicaciones antiguas que existían solo en el dispositivo.
+        // Esto evita que el catálogo se vea distinto en celular y computador.
+        if (localForWorkshop.isNotEmpty) {
+          await ApiClient().client
+              .from('products')
+              .upsert(localForWorkshop.map(_cloudPayload).toList());
+        }
         final rows = await ApiClient().client
             .from('products')
             .select()
@@ -86,17 +96,12 @@ class CommerceStore {
     final index = all.indexWhere((item) => item.id == product.id);
     final previousStock = index < 0 ? 0 : all[index].stock;
     index < 0 ? all.add(product) : all[index] = product;
-    await _saveProducts(all);
     if (ApiClient.cloudEnabled && ApiClient().client.auth.currentUser != null) {
-      try {
-        await ApiClient().client
-            .from('products')
-            .upsert(_cloudPayload(product));
-      } catch (_) {
-        // El producto queda guardado localmente y se sincronizará al abrir
-        // el inventario cuando la red vuelva a estar disponible.
-      }
+      // Con nube activa no se informa que una publicación fue guardada si la
+      // base de datos la rechazó: el administrador puede corregir el error.
+      await ApiClient().client.from('products').upsert(_cloudPayload(product));
     }
+    await _saveProducts(all);
     final difference = product.stock - previousStock;
     if (difference != 0) {
       await _appendMovement(

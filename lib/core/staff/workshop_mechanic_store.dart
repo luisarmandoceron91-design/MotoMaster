@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../networking/api_client.dart';
+
 @immutable
 class WorkshopMechanic {
   const WorkshopMechanic({
@@ -97,8 +99,40 @@ class WorkshopMechanicStore {
     String workshopId, {
     bool includeInactive = false,
   }) async {
+    var all = await _listAll();
+    if (ApiClient.cloudEnabled && ApiClient().client.auth.currentUser != null) {
+      final localForWorkshop = all
+          .where((item) => item.workshopId == workshopId)
+          .toList(growable: false);
+      try {
+        // Migra también los mecánicos creados antes de habilitar la nube.
+        // Así, al abrir el taller desde el teléfono se recuperan en el PC.
+        if (localForWorkshop.isNotEmpty) {
+          await ApiClient().client
+              .from('workshop_mechanics')
+              .upsert(localForWorkshop.map((item) => item.toMap()).toList());
+        }
+        final rows = await ApiClient().client
+            .from('workshop_mechanics')
+            .select()
+            .eq('workshop_id', workshopId);
+        final cloud = rows
+            .map(
+              (row) => WorkshopMechanic.fromMap(Map<String, dynamic>.from(row)),
+            )
+            .toList();
+        all = {
+          for (final mechanic in all) mechanic.id: mechanic,
+          for (final mechanic in cloud) mechanic.id: mechanic,
+        }.values.toList();
+        await _saveAll(all);
+      } catch (_) {
+        // La copia local permite trabajar sin conexión; al recuperar red se
+        // vuelve a leer la fuente oficial de la nube.
+      }
+    }
     final items =
-        (await _listAll())
+        all
             .where(
               (item) =>
                   item.workshopId == workshopId &&
@@ -115,14 +149,15 @@ class WorkshopMechanicStore {
       )).where((item) => item.available).toList(growable: false);
 
   Future<void> save(WorkshopMechanic mechanic) async {
-    final preferences = await SharedPreferences.getInstance();
     final items = [...await _listAll()];
     final index = items.indexWhere((item) => item.id == mechanic.id);
     index < 0 ? items.add(mechanic) : items[index] = mechanic;
-    await preferences.setString(
-      _key,
-      jsonEncode(items.map((item) => item.toMap()).toList()),
-    );
+    await _saveAll(items);
+    if (ApiClient.cloudEnabled && ApiClient().client.auth.currentUser != null) {
+      await ApiClient().client
+          .from('workshop_mechanics')
+          .upsert(mechanic.toMap());
+    }
     revision.value++;
   }
 
@@ -137,6 +172,12 @@ class WorkshopMechanicStore {
       _key,
       jsonEncode(items.map((item) => item.toMap()).toList()),
     );
+    if (ApiClient.cloudEnabled && ApiClient().client.auth.currentUser != null) {
+      await ApiClient().client
+          .from('workshop_mechanics')
+          .delete()
+          .eq('workshop_id', workshopId);
+    }
     revision.value++;
   }
 
@@ -154,5 +195,13 @@ class WorkshopMechanicStore {
     } catch (_) {
       return const [];
     }
+  }
+
+  Future<void> _saveAll(List<WorkshopMechanic> items) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(
+      _key,
+      jsonEncode(items.map((item) => item.toMap()).toList()),
+    );
   }
 }
