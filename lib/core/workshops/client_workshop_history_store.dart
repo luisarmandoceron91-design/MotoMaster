@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../networking/api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ClientWorkshopHistoryStore {
@@ -24,9 +25,43 @@ class ClientWorkshopHistoryStore {
   Future<List<String>> list(String clientEmail) async {
     final data = await _read();
     final values = data[_email(clientEmail)];
-    return values is List
+    final List<String> local = values is List
         ? values.map((value) => value.toString()).toList()
-        : [];
+        : <String>[];
+    final user = ApiClient.cloudEnabled
+        ? ApiClient().client.auth.currentUser
+        : null;
+    if (user == null) return local;
+    try {
+      // Importa una sola vez la lista creada por versiones anteriores.
+      if (local.isNotEmpty) {
+        await ApiClient().client.from('client_workshop_preferences').upsert([
+          for (var index = 0; index < local.length; index++)
+            {
+              'client_id': user.id,
+              'workshop_id': local[index],
+              'hidden': false,
+              'last_opened_at': DateTime.now()
+                  .subtract(Duration(minutes: index))
+                  .toUtc()
+                  .toIso8601String(),
+            },
+        ]);
+      }
+      final rows = await ApiClient().client
+          .from('client_workshop_preferences')
+          .select('workshop_id')
+          .eq('client_id', user.id)
+          .eq('hidden', false)
+          .order('last_opened_at', ascending: false);
+      final cloud = rows
+          .map((row) => row['workshop_id'].toString())
+          .toList(growable: false);
+      if (cloud.isNotEmpty || local.isEmpty) return cloud;
+    } catch (_) {
+      // La lista local es únicamente una caché disponible sin red.
+    }
+    return local;
   }
 
   Future<void> remember(String clientEmail, String workshopId) async {
@@ -40,6 +75,17 @@ class ClientWorkshopHistoryStore {
     ids.insert(0, workshopId);
     data[email] = ids.take(20).toList();
     await preferences.setString(_key, jsonEncode(data));
+    final user = ApiClient.cloudEnabled
+        ? ApiClient().client.auth.currentUser
+        : null;
+    if (user != null) {
+      await ApiClient().client.from('client_workshop_preferences').upsert({
+        'client_id': user.id,
+        'workshop_id': workshopId,
+        'hidden': false,
+        'last_opened_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    }
   }
 
   Future<void> remove(String clientEmail, String workshopId) async {
@@ -57,15 +103,27 @@ class ClientWorkshopHistoryStore {
   Future<List<String>> listHidden(String clientEmail) async {
     final preferences = await SharedPreferences.getInstance();
     final encoded = preferences.getString(_hiddenKey);
-    if (encoded == null) return const [];
+    var local = const <String>[];
     try {
-      final data = Map<String, dynamic>.from(jsonDecode(encoded) as Map);
-      final values = data[_email(clientEmail)];
-      return values is List
-          ? values.map((value) => value.toString()).toSet().toList()
-          : const [];
+      if (encoded != null) {
+        final data = Map<String, dynamic>.from(jsonDecode(encoded) as Map);
+        final values = data[_email(clientEmail)];
+        local = values is List
+            ? values.map((value) => value.toString()).toSet().toList()
+            : const [];
+      }
+      final user = ApiClient.cloudEnabled
+          ? ApiClient().client.auth.currentUser
+          : null;
+      if (user == null) return local;
+      final rows = await ApiClient().client
+          .from('client_workshop_preferences')
+          .select('workshop_id')
+          .eq('client_id', user.id)
+          .eq('hidden', true);
+      return rows.map((row) => row['workshop_id'].toString()).toList();
     } catch (_) {
-      return const [];
+      return local;
     }
   }
 
@@ -85,6 +143,17 @@ class ClientWorkshopHistoryStore {
     ids.add(workshopId);
     data[email] = ids.toList();
     await preferences.setString(_hiddenKey, jsonEncode(data));
+    final user = ApiClient.cloudEnabled
+        ? ApiClient().client.auth.currentUser
+        : null;
+    if (user != null) {
+      await ApiClient().client.from('client_workshop_preferences').upsert({
+        'client_id': user.id,
+        'workshop_id': workshopId,
+        'hidden': true,
+        'last_opened_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    }
   }
 
   Future<void> purgeWorkshop(String workshopId) async {

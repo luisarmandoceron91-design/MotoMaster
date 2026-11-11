@@ -251,7 +251,9 @@ class ClientServiceStore {
             : await cloud.from('motorcycles').insert(payload).select().single();
         saved = _motorcycleFromCloud(Map<String, dynamic>.from(row));
       } catch (_) {
-        // No se descarta lo digitado: queda como copia local temporal.
+        // Con nube habilitada no confirmamos una moto que no quedó guardada
+        // en la cuenta; así estará disponible en todos los dispositivos.
+        throw StateError('No fue posible guardar la moto en la nube.');
       }
     }
     final index = items.indexWhere(
@@ -496,12 +498,15 @@ class ClientServiceStore {
     final cloud = _cloudClient(appointment.workshopId, null);
     if (cloud != null && _isUuid(appointment.id)) {
       try {
-        await cloud.from('appointments').update({
-          'service_stage': updated.serviceStage,
-          'mechanic_name': updated.mechanicName,
-        }).eq('id', updated.id);
+        await cloud
+            .from('appointments')
+            .update({
+              'service_stage': updated.serviceStage,
+              'mechanic_name': updated.mechanicName,
+            })
+            .eq('id', updated.id);
       } catch (_) {
-        // La copia local evita perder el cambio mientras se reintenta.
+        throw const AppointmentPersistenceException();
       }
     }
     final global = await _listGlobalAppointments(preferences);

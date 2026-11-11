@@ -162,12 +162,10 @@ class CommerceStore {
             prefs.getString(_productsKey),
           ).map(CommerceProduct.fromJson).toList()
           ..removeWhere((item) => item.id == productId);
-    await _saveProducts(all);
     if (ApiClient.cloudEnabled && ApiClient().client.auth.currentUser != null) {
-      try {
-        await ApiClient().client.from('products').delete().eq('id', productId);
-      } catch (_) {}
+      await ApiClient().client.from('products').delete().eq('id', productId);
     }
+    await _saveProducts(all);
     revision.value++;
   }
 
