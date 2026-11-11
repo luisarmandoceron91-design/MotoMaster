@@ -43,14 +43,19 @@ class CommerceStore {
       final localForWorkshop = all
           .where((item) => item.workshopId == workshopId)
           .toList(growable: false);
-      try {
-        // Respalda publicaciones antiguas que existían solo en el dispositivo.
-        // Esto evita que el catálogo se vea distinto en celular y computador.
-        if (localForWorkshop.isNotEmpty) {
+      // Un administrador puede estar terminando una migración desde un
+      // dispositivo antiguo. Un cliente no tiene permiso para esta escritura,
+      // pero eso nunca debe impedirle leer el catálogo oficial.
+      if (localForWorkshop.isNotEmpty) {
+        try {
           await ApiClient().client
               .from('products')
               .upsert(localForWorkshop.map(_cloudPayload).toList());
+        } catch (_) {
+          // La lectura de abajo continúa para clientes y sesiones de solo lectura.
         }
+      }
+      try {
         final rows = await ApiClient().client
             .from('products')
             .select()

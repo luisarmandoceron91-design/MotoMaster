@@ -104,14 +104,18 @@ class WorkshopMechanicStore {
       final localForWorkshop = all
           .where((item) => item.workshopId == workshopId)
           .toList(growable: false);
-      try {
-        // Migra también los mecánicos creados antes de habilitar la nube.
-        // Así, al abrir el taller desde el teléfono se recuperan en el PC.
-        if (localForWorkshop.isNotEmpty) {
+      // Importa copias antiguas cuando la sesión tiene rol de taller. Si la
+      // sesión es de cliente, el rechazo de escritura no bloquea la lectura.
+      if (localForWorkshop.isNotEmpty) {
+        try {
           await ApiClient().client
               .from('workshop_mechanics')
               .upsert(localForWorkshop.map((item) => item.toMap()).toList());
+        } catch (_) {
+          // Un cliente no puede editar el equipo, pero sí debe poder verlo.
         }
+      }
+      try {
         final rows = await ApiClient().client
             .from('workshop_mechanics')
             .select()
