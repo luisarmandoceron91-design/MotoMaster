@@ -15,16 +15,63 @@ class ChatRepository {
   Future<String> openConversation({required String workshopId}) async {
     final user = _client.auth.currentUser;
     if (user == null) throw StateError('Debes iniciar sesión.');
-    final row = await _client
+
+    // Primero reutilizamos lo que ya está guardado. Así cada cliente tiene
+    // un historial único con cada taller, visible desde todos sus equipos.
+    final existing = await _client
         .from('conversations')
-        .upsert({
-          'workshop_id': workshopId,
-          'client_id': user.id,
-          'status': 'open',
-        }, onConflict: 'workshop_id,client_id')
         .select('id')
-        .single();
-    return row['id'] as String;
+        .eq('workshop_id', workshopId)
+        .eq('client_id', user.id)
+        .maybeSingle();
+    if (existing != null) return existing['id'] as String;
+
+    // Todo cliente que abre el soporte queda vinculado al taller antes de
+    // crear la conversación. Sin este paso la política de seguridad puede
+    // permitir un chat solo local y el administrador nunca lo ve.
+    final membership = await _client
+        .from('client_workshops')
+        .select('status')
+        .eq('workshop_id', workshopId)
+        .eq('client_id', user.id)
+        .maybeSingle();
+    if (membership == null) {
+      await _client.from('client_workshops').insert({
+        'workshop_id': workshopId,
+        'client_id': user.id,
+        'status': 'active',
+      });
+    } else if (membership['status'] != 'active') {
+      await _client
+          .from('client_workshops')
+          .update({'status': 'active'})
+          .eq('workshop_id', workshopId)
+          .eq('client_id', user.id);
+    }
+
+    try {
+      final row = await _client
+          .from('conversations')
+          .insert({
+            'workshop_id': workshopId,
+            'client_id': user.id,
+            'status': 'open',
+          })
+          .select('id')
+          .single();
+      return row['id'] as String;
+    } catch (_) {
+      // Dos toques rápidos o dos dispositivos pueden crear el chat al mismo
+      // tiempo. En ese caso tomamos la conversación creada por el otro.
+      final concurrent = await _client
+          .from('conversations')
+          .select('id')
+          .eq('workshop_id', workshopId)
+          .eq('client_id', user.id)
+          .maybeSingle();
+      if (concurrent != null) return concurrent['id'] as String;
+      rethrow;
+    }
   }
 
   Future<String> openWorkshopConversation({

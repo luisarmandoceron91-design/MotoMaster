@@ -20,6 +20,7 @@ import '../../core/commerce/commerce_receipt_service.dart';
 import '../../core/commerce/commerce_store.dart';
 import '../../core/commerce/inventory_models.dart';
 import '../../core/networking/api_client.dart';
+import '../../core/notifications/app_notifications.dart';
 import '../../core/staff/workshop_mechanic_store.dart';
 import '../../core/auth/local_workshop_admin_store.dart';
 import '../../core/tenant/tenant_context.dart';
@@ -504,19 +505,7 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
             ],
           ),
           actions: [
-            IconButton(
-              tooltip: 'Notificaciones',
-              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('No tienes notificaciones pendientes.'),
-                ),
-              ),
-              icon: Badge(
-                backgroundColor: brand.accentColor,
-                smallSize: 7,
-                child: const Icon(Icons.notifications_none_rounded),
-              ),
-            ),
+            AppNotificationsButton(color: brand.accentColor),
             IconButton(
               tooltip: 'Personalización del taller',
               onPressed: _openPersonalization,

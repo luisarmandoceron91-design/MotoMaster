@@ -20,6 +20,7 @@ import '../../core/commerce/product_gallery.dart';
 import '../../core/commerce/commerce_receipt_service.dart';
 import '../../core/commerce/commerce_store.dart';
 import '../../core/networking/api_client.dart';
+import '../../core/notifications/app_notifications.dart';
 import '../../core/staff/workshop_mechanic_store.dart';
 import '../../core/tenant/tenant_context.dart';
 import '../../core/workshops/workshop.dart';
@@ -783,10 +784,10 @@ class _PartsPageState extends State<_PartsPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
-                              // Da prioridad a la foto: ocupa más de la mitad
-                              // del recuadro y todas las tarjetas conservan la
-                              // misma proporción en el catálogo.
-                              flex: 7,
+                              // En móvil equilibramos foto e información: la
+                              // imagen se ve grande, pero siempre queda espacio
+                              // suficiente para disponibilidad y el botón.
+                              flex: 5,
                               child: SizedBox(
                                 width: double.infinity,
                                 child: previewPhoto != null
@@ -825,9 +826,9 @@ class _PartsPageState extends State<_PartsPage> {
                                       ),
                               ),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 10),
                             Expanded(
-                              flex: 3,
+                              flex: 5,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -3293,15 +3294,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'Notificaciones',
-            onPressed: _showAppointmentNotifications,
-            icon: Badge(
-              isLabelVisible: _hasAppointmentReminder,
-              smallSize: 7,
-              child: const Icon(Icons.notifications_none_rounded),
-            ),
-          ),
+          AppNotificationsButton(color: widget.brand.accentColor),
           PopupMenuButton<String>(
             tooltip: 'Cuenta',
             icon: _headerProfileAvatar(),
