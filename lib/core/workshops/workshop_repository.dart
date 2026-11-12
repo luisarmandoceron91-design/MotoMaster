@@ -46,22 +46,30 @@ class WorkshopRepository {
         for (final row in rows) _workshopFromRow(row),
       ];
       await _local.syncPublicDirectory(cloudItems);
-      final merged = <String, Workshop>{
-        // Local data remains a fallback while offline, but once the public
-        // directory is available the owner-controlled cloud status is the
-        // source of truth for every client.
-        for (final item in localItems) item.id: item,
-        for (final item in cloudItems) item.id: item,
-      };
-      // The client directory is based on registered, non-deleted workshops
-      // returned by list_active_workshops. A workshop must remain searchable
-      // by its department and municipality even if its subscription state is
-      // pending or its trial has finished.
-      return canonicalWorkshops(merged.values);
+      // El directorio público de la nube es la fuente de verdad cuando está
+      // disponible. No mezclamos talleres locales aquí: una copia anterior
+      // podía volver visible un taller que el propietario ya suspendió.
+      return canonicalWorkshops(cloudItems);
     } catch (error) {
       if (_isConnectionFailure(error)) return localItems;
       rethrow;
     }
+  }
+
+  /// Confirma justo antes de entrar que el taller continúa habilitado para
+  /// clientes. Protege enlaces e historiales guardados antes de una suspensión.
+  Future<bool> isAvailableForClients(String workshopId) async {
+    if (!ApiClient.cloudEnabled) {
+      final workshop = await _local.find(workshopId);
+      return workshop?.hasPlatformAccess ?? false;
+    }
+    final rows = await _client
+        .rpc('list_active_workshops')
+        .timeout(const Duration(seconds: 5));
+    return (rows as List).any(
+      (row) =>
+          Map<String, dynamic>.from(row as Map)['id']?.toString() == workshopId,
+    );
   }
 
   Workshop _withCurrentAccountAccess(

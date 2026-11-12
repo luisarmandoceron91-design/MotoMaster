@@ -279,9 +279,7 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
                     _Avatar(profile: widget.profile),
                     const SizedBox(width: 9),
                     ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: compact ? 62 : 130,
-                      ),
+                      constraints: BoxConstraints(maxWidth: compact ? 62 : 130),
                       child: Text(firstName, overflow: TextOverflow.ellipsis),
                     ),
                     const Icon(Icons.expand_more_rounded, size: 20),
@@ -629,6 +627,19 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
     }
     setState(() => _entering = workshop.id);
     try {
+      final isAvailable = await _repository.isAvailableForClients(workshop.id);
+      if (!isAvailable) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Este taller no está disponible para clientes en este momento.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
       try {
         await _repository.joinAsClient(workshop.id);
       } catch (_) {

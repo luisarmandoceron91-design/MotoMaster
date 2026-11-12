@@ -29,6 +29,10 @@ class AppointmentPersistenceException implements Exception {
   const AppointmentPersistenceException();
 }
 
+class AppointmentAlreadyExistsException implements Exception {
+  const AppointmentAlreadyExistsException();
+}
+
 class ClientMotorcycle {
   const ClientMotorcycle({
     required this.id,
@@ -82,6 +86,9 @@ class ClientAppointment {
     this.clientId = '',
     this.serviceStage = 'Cita solicitada',
     this.mechanicName = '',
+    this.clientName = '',
+    this.clientEmail = '',
+    this.clientPhone = '',
     this.updatedAt,
   });
 
@@ -97,9 +104,14 @@ class ClientAppointment {
   final String clientId;
   final String serviceStage;
   final String mechanicName;
+  final String clientName;
+  final String clientEmail;
+  final String clientPhone;
   final DateTime? updatedAt;
 
   bool get isCancelled => status == 'Cancelada';
+  bool get isOpen =>
+      !isCancelled && status != 'Completada' && serviceStage != 'Entregada';
 
   DateTime get startsAt {
     final parts = time.split(':');
@@ -121,6 +133,9 @@ class ClientAppointment {
     String? clientId,
     String? serviceStage,
     String? mechanicName,
+    String? clientName,
+    String? clientEmail,
+    String? clientPhone,
     DateTime? updatedAt,
   }) => ClientAppointment(
     id: id ?? this.id,
@@ -135,6 +150,9 @@ class ClientAppointment {
     clientId: clientId ?? this.clientId,
     serviceStage: serviceStage ?? this.serviceStage,
     mechanicName: mechanicName ?? this.mechanicName,
+    clientName: clientName ?? this.clientName,
+    clientEmail: clientEmail ?? this.clientEmail,
+    clientPhone: clientPhone ?? this.clientPhone,
     updatedAt: updatedAt ?? this.updatedAt,
   );
 
@@ -151,26 +169,41 @@ class ClientAppointment {
     'client_id': clientId,
     'service_stage': serviceStage,
     'mechanic_name': mechanicName,
+    'client_name': clientName,
+    'client_email': clientEmail,
+    'client_phone': clientPhone,
     'updated_at': updatedAt?.toIso8601String(),
   };
 
-  factory ClientAppointment.fromMap(Map<String, dynamic> map) =>
-      ClientAppointment(
-        id: map['id']?.toString() ?? '',
-        motorcycleId: map['motorcycle_id']?.toString() ?? '',
-        motorcycleName: map['motorcycle_name']?.toString() ?? '',
-        serviceType: map['service_type']?.toString() ?? '',
-        date:
-            DateTime.tryParse(map['date']?.toString() ?? '') ?? DateTime.now(),
-        time: map['time']?.toString() ?? '',
-        notes: map['notes']?.toString() ?? '',
-        status: map['status']?.toString() ?? 'Solicitada',
-        workshopId: map['workshop_id']?.toString() ?? '',
-        clientId: map['client_id']?.toString() ?? '',
-        serviceStage: map['service_stage']?.toString() ?? 'Cita solicitada',
-        mechanicName: map['mechanic_name']?.toString() ?? '',
-        updatedAt: DateTime.tryParse(map['updated_at']?.toString() ?? ''),
-      );
+  factory ClientAppointment.fromMap(Map<String, dynamic> map) {
+    final rawProfile = map['client_profile'];
+    final profile = rawProfile is Map
+        ? Map<String, dynamic>.from(rawProfile)
+        : const <String, dynamic>{};
+    return ClientAppointment(
+      id: map['id']?.toString() ?? '',
+      motorcycleId: map['motorcycle_id']?.toString() ?? '',
+      motorcycleName: map['motorcycle_name']?.toString() ?? '',
+      serviceType: map['service_type']?.toString() ?? '',
+      date: DateTime.tryParse(map['date']?.toString() ?? '') ?? DateTime.now(),
+      time: map['time']?.toString() ?? '',
+      notes: map['notes']?.toString() ?? '',
+      status: map['status']?.toString() ?? 'Solicitada',
+      workshopId: map['workshop_id']?.toString() ?? '',
+      clientId: map['client_id']?.toString() ?? '',
+      serviceStage: map['service_stage']?.toString() ?? 'Cita solicitada',
+      mechanicName: map['mechanic_name']?.toString() ?? '',
+      clientName:
+          map['client_name']?.toString() ??
+          profile['full_name']?.toString() ??
+          '',
+      clientEmail:
+          map['client_email']?.toString() ?? profile['email']?.toString() ?? '',
+      clientPhone:
+          map['client_phone']?.toString() ?? profile['phone']?.toString() ?? '',
+      updatedAt: DateTime.tryParse(map['updated_at']?.toString() ?? ''),
+    );
+  }
 }
 
 class ClientServiceStore {
@@ -282,9 +315,32 @@ class ClientServiceStore {
             .eq('workshop_id', workshopId)
             .eq('client_id', clientId)
             .order('scheduled_at');
-        final items = (rows as List)
-            .map((row) => _appointmentFromCloud(Map<String, dynamic>.from(row)))
+        final clientIds = (rows as List)
+            .map((row) => row['client_id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet()
             .toList();
+        List<dynamic> profiles = const [];
+        if (clientIds.isNotEmpty) {
+          try {
+            profiles = await cloud
+                .from('profiles')
+                .select('user_id, full_name, email, phone')
+                .inFilter('user_id', clientIds);
+          } catch (_) {
+            // Los datos de la cita siguen disponibles aunque el perfil no
+            // pueda leerse temporalmente por una política de acceso.
+          }
+        }
+        final profileById = <String, Map<String, dynamic>>{
+          for (final row in profiles)
+            row['user_id'].toString(): Map<String, dynamic>.from(row),
+        };
+        final items = (rows as List).map((row) {
+          final item = Map<String, dynamic>.from(row);
+          item['client_profile'] = profileById[item['client_id']?.toString()];
+          return _appointmentFromCloud(item);
+        }).toList();
         await _saveAppointments(preferences, workshopId, clientId, items);
         await _mergeGlobalAppointments(preferences, items);
         return items;
@@ -328,6 +384,19 @@ class ClientServiceStore {
     final cloud = _cloudClient(workshopId, clientId);
     if (cloud != null) {
       try {
+        if (_isUuid(saved.motorcycleId)) {
+          final existing = await cloud
+              .from('appointments')
+              .select('id')
+              .eq('workshop_id', workshopId)
+              .eq('client_id', clientId)
+              .eq('motorcycle_id', saved.motorcycleId)
+              .inFilter('status', ['requested', 'confirmed', 'in_progress'])
+              .limit(1);
+          if ((existing as List).isNotEmpty) {
+            throw const AppointmentAlreadyExistsException();
+          }
+        }
         final row = await cloud
             .from('appointments')
             .insert({
@@ -346,6 +415,8 @@ class ClientServiceStore {
             .select('id')
             .single();
         saved = saved.copyWith(id: row['id']?.toString());
+      } on AppointmentAlreadyExistsException {
+        rethrow;
       } on PostgrestException catch (error) {
         if (error.code == '23505') {
           throw const AppointmentSlotUnavailableException();
@@ -469,9 +540,32 @@ class ClientServiceStore {
             .select()
             .eq('workshop_id', workshopId)
             .order('scheduled_at');
-        final items = (rows as List)
-            .map((row) => _appointmentFromCloud(Map<String, dynamic>.from(row)))
+        final clientIds = (rows as List)
+            .map((row) => row['client_id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet()
             .toList();
+        List<dynamic> profiles = const [];
+        if (clientIds.isNotEmpty) {
+          try {
+            profiles = await cloud
+                .from('profiles')
+                .select('user_id, full_name, email, phone')
+                .inFilter('user_id', clientIds);
+          } catch (_) {
+            // El panel conserva las citas incluso si falla la información
+            // complementaria del perfil del cliente.
+          }
+        }
+        final profileById = <String, Map<String, dynamic>>{
+          for (final row in profiles)
+            row['user_id'].toString(): Map<String, dynamic>.from(row),
+        };
+        final items = (rows as List).map((row) {
+          final item = Map<String, dynamic>.from(row);
+          item['client_profile'] = profileById[item['client_id']?.toString()];
+          return _appointmentFromCloud(item);
+        }).toList();
         await _mergeGlobalAppointments(preferences, items);
         return items;
       } catch (_) {
@@ -492,6 +586,11 @@ class ClientServiceStore {
     final preferences = await SharedPreferences.getInstance();
     final updated = appointment.copyWith(
       serviceStage: stage,
+      status: stage == 'Entregada'
+          ? 'Completada'
+          : stage == 'Cita solicitada'
+          ? 'Solicitada'
+          : 'En proceso',
       mechanicName: mechanicName,
       updatedAt: DateTime.now(),
     );
@@ -503,6 +602,11 @@ class ClientServiceStore {
             .update({
               'service_stage': updated.serviceStage,
               'mechanic_name': updated.mechanicName,
+              'status': stage == 'Entregada'
+                  ? 'completed'
+                  : stage == 'Cita solicitada'
+                  ? 'requested'
+                  : 'in_progress',
             })
             .eq('id', updated.id);
       } catch (_) {

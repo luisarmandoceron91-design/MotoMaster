@@ -3049,9 +3049,14 @@ class _BookingStep extends StatelessWidget {
 }
 
 class _MotorcycleCard extends StatelessWidget {
-  const _MotorcycleCard({required this.item, required this.accent});
+  const _MotorcycleCard({
+    required this.item,
+    required this.accent,
+    this.onBook,
+  });
   final ClientMotorcycle item;
   final Color accent;
+  final VoidCallback? onBook;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -3061,40 +3066,53 @@ class _MotorcycleCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       border: Border.all(color: const Color(0xFF373A40)),
     ),
-    child: Row(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          width: 62,
-          height: 62,
-          decoration: BoxDecoration(
-            color: accent.withValues(alpha: .12),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(Icons.two_wheeler_rounded, color: accent, size: 34),
-        ),
-        const SizedBox(width: 15),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                item.displayName,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                ),
+        Row(
+          children: [
+            Container(
+              width: 62,
+              height: 62,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: .12),
+                borderRadius: BorderRadius.circular(8),
               ),
-              Text(
-                [
-                  item.plate,
-                  item.year,
-                  item.color,
-                ].where((value) => value.isNotEmpty).join(' · '),
-                style: const TextStyle(color: Color(0xFFABB0B6)),
+              child: Icon(Icons.two_wheeler_rounded, color: accent, size: 34),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.displayName,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    [
+                      item.plate,
+                      item.year,
+                      item.color,
+                    ].where((value) => value.isNotEmpty).join(' · '),
+                    style: const TextStyle(color: Color(0xFFABB0B6)),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+        if (onBook != null) ...[
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            onPressed: onBook,
+            icon: const Icon(Icons.calendar_month_outlined),
+            label: const Text('Agendar cita con esta moto'),
+          ),
+        ],
       ],
     ),
   );
@@ -4035,7 +4053,11 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
           )
         else
           for (final item in _motorcycles) ...[
-            _MotorcycleCard(item: item, accent: widget.brand.accentColor),
+            _MotorcycleCard(
+              item: item,
+              accent: widget.brand.accentColor,
+              onBook: () => _showBooking(null, null, null, item),
+            ),
             const SizedBox(height: 12),
           ],
       ],
@@ -4355,13 +4377,14 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
     String? initialService,
     DateTime? initialDate,
     String? initialTime,
+    ClientMotorcycle? initialMotorcycle,
   ]) async {
     if (_motorcycles.isEmpty) {
       _notice('Primero agrega una moto para reservar el servicio.');
       setState(() => _tab = 2);
       return;
     }
-    var motorcycle = _motorcycles.first;
+    var motorcycle = initialMotorcycle ?? _motorcycles.first;
     var service = initialService ?? 'Mantenimiento';
     final mechanics = await WorkshopMechanicStore().available(
       widget.workshop.id,
@@ -4457,7 +4480,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
                 ),
                 const SizedBox(height: 18),
                 DropdownButtonFormField<ClientMotorcycle>(
-                  initialValue: motorcycle,
+                  value: motorcycle,
                   decoration: const InputDecoration(labelText: 'Tu moto'),
                   items: [
                     for (final item in _motorcycles)
@@ -4467,7 +4490,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
                       ),
                   ],
                   onChanged: (value) {
-                    if (value != null) motorcycle = value;
+                    if (value != null) setSheet(() => motorcycle = value);
                   },
                 ),
                 const SizedBox(height: 18),
@@ -4824,6 +4847,10 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
         _notice('Cita programada. Te recordaremos antes de la fecha.');
       } on AppointmentSlotUnavailableException {
         _notice('Ese horario acaba de ser reservado. Elige otra hora.');
+      } on AppointmentAlreadyExistsException {
+        _notice(
+          'Esta moto ya tiene una cita activa. Cancélala desde Citas antes de solicitar otra.',
+        );
       } on AppointmentPersistenceException {
         _notice(
           'No pudimos guardar la cita. Revisa tu conexión e inténtalo nuevamente.',

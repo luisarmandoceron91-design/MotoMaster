@@ -1463,6 +1463,7 @@ class _WorkshopServicePanel extends StatefulWidget {
 class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
   final _store = ClientServiceStore();
   List<ClientAppointment> _appointments = const [];
+  List<WorkshopMechanic> _mechanics = const [];
 
   @override
   void initState() {
@@ -1478,8 +1479,15 @@ class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
   }
 
   Future<void> _load() async {
-    final items = await _store.listWorkshopAppointments(widget.workshopId);
-    if (mounted) setState(() => _appointments = items);
+    final results = await Future.wait([
+      _store.listWorkshopAppointments(widget.workshopId),
+      WorkshopMechanicStore().list(widget.workshopId, includeInactive: true),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _appointments = results[0] as List<ClientAppointment>;
+      _mechanics = results[1] as List<WorkshopMechanic>;
+    });
   }
 
   @override
@@ -1547,13 +1555,30 @@ class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                       Text(
-                        '${item.motorcycleName} · ${item.clientId}',
+                        item.clientName.trim().isEmpty
+                            ? 'Cliente registrado · ${item.motorcycleName}'
+                            : '${item.clientName} · ${item.motorcycleName}',
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Color(0xFFADB1B8),
                           fontSize: 12,
                         ),
                       ),
+                      if (item.clientPhone.trim().isNotEmpty ||
+                          item.clientEmail.trim().isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Text(
+                            [item.clientPhone, item.clientEmail]
+                                .where((value) => value.trim().isNotEmpty)
+                                .join(' · '),
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF8F969F),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 5),
                       Text(
                         '${item.date.day.toString().padLeft(2, '0')}/'
@@ -1612,20 +1637,60 @@ class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
                       ],
                     ],
                   );
-                  final picker = DropdownButton<String>(
-                    value: clientServiceStages.contains(item.serviceStage)
-                        ? item.serviceStage
-                        : clientServiceStages.first,
-                    underline: const SizedBox.shrink(),
-                    borderRadius: BorderRadius.circular(8),
-                    items: [
-                      for (final stage in clientServiceStages)
-                        DropdownMenuItem(value: stage, child: Text(stage)),
+                  final picker = Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      DropdownButton<String>(
+                        value: clientServiceStages.contains(item.serviceStage)
+                            ? item.serviceStage
+                            : clientServiceStages.first,
+                        underline: const SizedBox.shrink(),
+                        borderRadius: BorderRadius.circular(8),
+                        items: [
+                          for (final stage in clientServiceStages)
+                            DropdownMenuItem(value: stage, child: Text(stage)),
+                        ],
+                        onChanged: (stage) async {
+                          if (stage == null) return;
+                          await _store.updateAppointmentStage(
+                            item,
+                            stage,
+                            mechanicName: item.mechanicName,
+                          );
+                        },
+                      ),
+                      DropdownButton<String>(
+                        value:
+                            _mechanics.any(
+                              (mechanic) => mechanic.name == item.mechanicName,
+                            )
+                            ? item.mechanicName
+                            : '',
+                        isExpanded: true,
+                        hint: const Text('Asignar mecánico'),
+                        underline: const SizedBox.shrink(),
+                        items: [
+                          const DropdownMenuItem(
+                            value: '',
+                            child: Text('Sin asignar'),
+                          ),
+                          for (final mechanic in _mechanics.where(
+                            (mechanic) => mechanic.active,
+                          ))
+                            DropdownMenuItem(
+                              value: mechanic.name,
+                              child: Text(mechanic.name),
+                            ),
+                        ],
+                        onChanged: (mechanicName) async {
+                          await _store.updateAppointmentStage(
+                            item,
+                            item.serviceStage,
+                            mechanicName: mechanicName ?? '',
+                          );
+                        },
+                      ),
                     ],
-                    onChanged: (stage) async {
-                      if (stage == null) return;
-                      await _store.updateAppointmentStage(item, stage);
-                    },
                   );
                   if (constraints.maxWidth < 620) {
                     return Column(
