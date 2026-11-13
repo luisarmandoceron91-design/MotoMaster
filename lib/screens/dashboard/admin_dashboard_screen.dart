@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -720,17 +721,25 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
       _ => _WorkshopFeedbackPanel(workshopId: widget.workshopId, brand: brand),
     };
     final padding = _preferences.compactMode ? 14.0 : 24.0;
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(padding),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1380),
-          child: KeyedSubtree(
-            key: ValueKey('section-$_selected-refresh-$_refreshToken'),
-            child: content,
+    // El contenido recibe siempre un ancho concreto. Center + ConstrainedBox
+    // dentro del scroll dejaba el ancho sin resolver en pantallas grandes y
+    // algunos textos de Agenda se reducían a una letra por línea.
+    return LayoutBuilder(
+      builder: (context, viewport) {
+        final pageWidth = math.min(1380.0, viewport.maxWidth - padding * 2);
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(padding),
+          child: Center(
+            child: SizedBox(
+              width: pageWidth.clamp(0.0, 1380.0),
+              child: KeyedSubtree(
+                key: ValueKey('section-$_selected-refresh-$_refreshToken'),
+                child: content,
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
