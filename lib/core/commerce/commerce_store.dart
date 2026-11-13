@@ -46,13 +46,21 @@ class CommerceStore {
       // Un administrador puede estar terminando una migración desde un
       // dispositivo antiguo. Un cliente no tiene permiso para esta escritura,
       // pero eso nunca debe impedirle leer el catálogo oficial.
-      final migrationKey = 'commerce_cloud_migrated_$workshopId';
+      // v2 reintenta la migración de los catálogos creados antes de usar UUID.
+      // Aquellas publicaciones permanecían solo en el teléfono porque Supabase
+      // rechazaba su id local y el marcador anterior evitaba un nuevo intento.
+      final migrationKey = 'commerce_cloud_migrated_v2_$workshopId';
       if (localForWorkshop.isNotEmpty &&
           !(prefs.getBool(migrationKey) ?? false)) {
         try {
-          await ApiClient().client
-              .from('products')
-              .upsert(localForWorkshop.map(_cloudPayload).toList());
+          // Se insertan una por una para que un registro antiguo defectuoso no
+          // bloquee el resto del catálogo. Si el id no es UUID, Supabase crea
+          // uno válido y el producto queda disponible en todos los equipos.
+          for (final product in localForWorkshop) {
+            await ApiClient().client
+                .from('products')
+                .upsert(_cloudMigrationPayload(product));
+          }
           await prefs.setBool(migrationKey, true);
         } catch (_) {
           // La lectura de abajo continúa para clientes y sesiones de solo lectura.
@@ -114,7 +122,9 @@ class CommerceStore {
       // base de datos la rechazó: el administrador puede corregir el error.
       await ApiClient().client.from('products').upsert(_cloudPayload(product));
     }
-    await _saveProducts(all); // solo acelera la siguiente lectura; la nube manda.
+    await _saveProducts(
+      all,
+    ); // solo acelera la siguiente lectura; la nube manda.
     final difference = product.stock - previousStock;
     if (difference != 0) {
       await _appendMovement(
@@ -228,6 +238,16 @@ class CommerceStore {
         : base64Encode(product.imageBytes!),
     'image_gallery_base64': product.photos.map(base64Encode).toList(),
   };
+
+  Map<String, dynamic> _cloudMigrationPayload(CommerceProduct product) {
+    final payload = _cloudPayload(product);
+    if (!_isUuid(product.id)) payload.remove('id');
+    return payload;
+  }
+
+  bool _isUuid(String value) => RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+  ).hasMatch(value);
 
   List<Uint8List> _decodeCloudGallery(dynamic value) {
     if (value is! List) return const [];
