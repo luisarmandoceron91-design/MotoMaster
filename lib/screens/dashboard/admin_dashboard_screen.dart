@@ -421,6 +421,7 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
       const WorkshopDashboardPreferences();
   int _selected = 0;
   int _refreshToken = 0;
+  String? _pendingChatConversationId;
 
   WorkshopBrand get brand => widget.brand;
 
@@ -522,6 +523,8 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
                 setState(() {
                   if (type == 'chat_message') {
                     _selected = 2;
+                    _pendingChatConversationId = notification['reference_id']
+                        ?.toString();
                   } else if (type.contains('appointment') ||
                       type.contains('cita')) {
                     _selected = 1;
@@ -671,7 +674,13 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
         onPersonalization: _openPersonalization,
       ),
       1 => _WorkshopServicePanel(workshopId: widget.workshopId, brand: brand),
-      2 => _WorkshopChatPanel(workshopId: widget.workshopId, brand: brand),
+      2 => _WorkshopChatPanel(
+        workshopId: widget.workshopId,
+        brand: brand,
+        initialConversationId: _pendingChatConversationId,
+        onInitialConversationOpened: () =>
+            setState(() => _pendingChatConversationId = null),
+      ),
       3 => _WorkshopClientsPanel(workshopId: widget.workshopId, brand: brand),
       4 => _WorkshopMechanicsPanel(workshopId: widget.workshopId, brand: brand),
       5 => _WorkshopCommercePanel(
@@ -2229,184 +2238,211 @@ class _WorkshopMechanicsPanelState extends State<_WorkshopMechanicsPanel> {
 }
 
 class _WorkshopChatPanel extends StatelessWidget {
-  const _WorkshopChatPanel({required this.workshopId, required this.brand});
+  const _WorkshopChatPanel({
+    required this.workshopId,
+    required this.brand,
+    this.initialConversationId,
+    this.onInitialConversationOpened,
+  });
 
   final String workshopId;
   final WorkshopBrand brand;
+  final String? initialConversationId;
+  final VoidCallback? onInitialConversationOpened;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(
-      color: const Color(0xE8191B1F),
-      border: Border.all(color: brand.accentColor.withValues(alpha: .45)),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.forum_outlined, color: brand.accentColor),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Chat con clientes',
-                    style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
-                  ),
-                  Text(
-                    'Solo aparecen conversaciones iniciadas con este taller.',
-                    style: TextStyle(color: Color(0xFFBFC2C7), fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            Chip(
-              avatar: const Icon(Icons.lock_outline_rounded, size: 16),
-              label: const Text('Privado por taller'),
-              side: BorderSide(color: brand.accentColor.withValues(alpha: .5)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        if (!ApiClient.cloudEnabled)
-          ValueListenableBuilder<int>(
-            valueListenable: LocalChatStore.revision,
-            builder: (context, _, _) =>
-                FutureBuilder<List<LocalChatConversation>>(
-                  future: LocalChatStore().listConversations(workshopId),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return LinearProgressIndicator(color: brand.accentColor);
-                    }
-                    final conversations = snapshot.data!;
-                    if (conversations.isEmpty) {
-                      return const Text(
-                        'Todavía no hay conversaciones con clientes.',
-                        style: TextStyle(color: Color(0xFFBFC2C7)),
-                      );
-                    }
-                    return Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        for (final conversation in conversations)
-                          SizedBox(
-                            width: 320,
-                            child: ListTile(
-                              tileColor: const Color(0xFF22252A),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                side: const BorderSide(
-                                  color: Color(0xFF3A3E45),
-                                ),
-                              ),
-                              leading: CircleAvatar(
-                                backgroundColor: brand.accentColor.withValues(
-                                  alpha: .15,
-                                ),
-                                foregroundColor: brand.accentColor,
-                                child: Text(
-                                  conversation.clientName.trim().isEmpty
-                                      ? 'C'
-                                      : conversation.clientName
-                                            .trim()[0]
-                                            .toUpperCase(),
-                                ),
-                              ),
-                              title: Text(
-                                conversation.clientName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              subtitle: Text(
-                                conversation.lastMessage,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              trailing: const Icon(Icons.chevron_right_rounded),
-                              onTap: () =>
-                                  _openLocalConversation(context, conversation),
-                            ),
-                          ),
-                      ],
-                    );
-                  },
-                ),
-          ),
-        if (ApiClient.cloudEnabled) ...[
-          const SizedBox(height: 18),
-          const Divider(),
-          const SizedBox(height: 8),
-          StreamBuilder<List<Map<String, dynamic>>>(
-            stream: ChatRepository().watchWorkshopConversations(workshopId),
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return const Text(
-                  'No fue posible cargar los mensajes en este momento.',
-                  style: TextStyle(color: Color(0xFFFF8589)),
-                );
-              }
-              if (!snapshot.hasData) {
-                return LinearProgressIndicator(color: brand.accentColor);
-              }
-              final conversations = snapshot.data!;
-              if (conversations.isEmpty) {
-                return const Text(
-                  'Todavía no hay conversaciones con clientes.',
-                  style: TextStyle(color: Color(0xFFBFC2C7)),
-                );
-              }
-              return FutureBuilder<List<WorkshopChatPreview>>(
-                future: ChatRepository().workshopPreviews(
-                  workshopId: workshopId,
-                  conversations: conversations,
-                ),
-                builder: (context, previewSnapshot) {
-                  if (previewSnapshot.hasError) {
-                    return const Text(
-                      'No fue posible cargar los datos de las conversaciones.',
-                      style: TextStyle(color: Color(0xFFFF8589)),
-                    );
-                  }
-                  if (!previewSnapshot.hasData) {
-                    return LinearProgressIndicator(color: brand.accentColor);
-                  }
-                  final previews = previewSnapshot.data!;
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF171A1E),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFF343941)),
-                    ),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: previews.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) => _CloudConversationTile(
-                        preview: previews[index],
-                        accent: brand.accentColor,
-                        onTap: () => _openConversation(
-                          context,
-                          previews[index].conversationId,
-                        ),
+  Widget build(BuildContext context) {
+    final conversationId = initialConversationId?.trim() ?? '';
+    if (conversationId.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        onInitialConversationOpened?.call();
+        _openConversation(context, conversationId);
+      });
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xE8191B1F),
+        border: Border.all(color: brand.accentColor.withValues(alpha: .45)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.forum_outlined, color: brand.accentColor),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Chat con clientes',
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-                  );
-                },
-              );
-            },
+                    Text(
+                      'Solo aparecen conversaciones iniciadas con este taller.',
+                      style: TextStyle(color: Color(0xFFBFC2C7), fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              Chip(
+                avatar: const Icon(Icons.lock_outline_rounded, size: 16),
+                label: const Text('Privado por taller'),
+                side: BorderSide(
+                  color: brand.accentColor.withValues(alpha: .5),
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 14),
+          if (!ApiClient.cloudEnabled)
+            ValueListenableBuilder<int>(
+              valueListenable: LocalChatStore.revision,
+              builder: (context, _, _) =>
+                  FutureBuilder<List<LocalChatConversation>>(
+                    future: LocalChatStore().listConversations(workshopId),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) {
+                        return LinearProgressIndicator(
+                          color: brand.accentColor,
+                        );
+                      }
+                      final conversations = snapshot.data!;
+                      if (conversations.isEmpty) {
+                        return const Text(
+                          'Todavía no hay conversaciones con clientes.',
+                          style: TextStyle(color: Color(0xFFBFC2C7)),
+                        );
+                      }
+                      return Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          for (final conversation in conversations)
+                            SizedBox(
+                              width: 320,
+                              child: ListTile(
+                                tileColor: const Color(0xFF22252A),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  side: const BorderSide(
+                                    color: Color(0xFF3A3E45),
+                                  ),
+                                ),
+                                leading: CircleAvatar(
+                                  backgroundColor: brand.accentColor.withValues(
+                                    alpha: .15,
+                                  ),
+                                  foregroundColor: brand.accentColor,
+                                  child: Text(
+                                    conversation.clientName.trim().isEmpty
+                                        ? 'C'
+                                        : conversation.clientName
+                                              .trim()[0]
+                                              .toUpperCase(),
+                                  ),
+                                ),
+                                title: Text(
+                                  conversation.clientName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  conversation.lastMessage,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                trailing: const Icon(
+                                  Icons.chevron_right_rounded,
+                                ),
+                                onTap: () => _openLocalConversation(
+                                  context,
+                                  conversation,
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+            ),
+          if (ApiClient.cloudEnabled) ...[
+            const SizedBox(height: 18),
+            const Divider(),
+            const SizedBox(height: 8),
+            StreamBuilder<List<Map<String, dynamic>>>(
+              stream: ChatRepository().watchWorkshopConversations(workshopId),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return const Text(
+                    'No fue posible cargar los mensajes en este momento.',
+                    style: TextStyle(color: Color(0xFFFF8589)),
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return LinearProgressIndicator(color: brand.accentColor);
+                }
+                final conversations = snapshot.data!;
+                if (conversations.isEmpty) {
+                  return const Text(
+                    'Todavía no hay conversaciones con clientes.',
+                    style: TextStyle(color: Color(0xFFBFC2C7)),
+                  );
+                }
+                return FutureBuilder<List<WorkshopChatPreview>>(
+                  future: ChatRepository().workshopPreviews(
+                    workshopId: workshopId,
+                    conversations: conversations,
+                  ),
+                  builder: (context, previewSnapshot) {
+                    if (previewSnapshot.hasError) {
+                      return const Text(
+                        'No fue posible cargar los datos de las conversaciones.',
+                        style: TextStyle(color: Color(0xFFFF8589)),
+                      );
+                    }
+                    if (!previewSnapshot.hasData) {
+                      return LinearProgressIndicator(color: brand.accentColor);
+                    }
+                    final previews = previewSnapshot.data!;
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF171A1E),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFF343941)),
+                      ),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: previews.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) => _CloudConversationTile(
+                          preview: previews[index],
+                          accent: brand.accentColor,
+                          onTap: () => _openConversation(
+                            context,
+                            previews[index].conversationId,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ],
         ],
-      ],
-    ),
-  );
+      ),
+    );
+  }
 
   Future<void> _openLocalConversation(
     BuildContext context,
@@ -2705,13 +2741,19 @@ class _CloudConversationTile extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (time.isNotEmpty)
-              Text(time, style: const TextStyle(fontSize: 11, color: Color(0xFFBFC2C7))),
+              Text(
+                time,
+                style: const TextStyle(fontSize: 11, color: Color(0xFFBFC2C7)),
+              ),
             const SizedBox(height: 5),
             if (preview.unreadCount > 0)
               Container(
                 constraints: const BoxConstraints(minWidth: 21, minHeight: 21),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: accent,
+                  shape: BoxShape.circle,
+                ),
                 alignment: Alignment.center,
                 child: Text(
                   preview.unreadCount > 99 ? '99+' : '${preview.unreadCount}',
