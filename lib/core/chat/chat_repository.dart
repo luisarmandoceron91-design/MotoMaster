@@ -151,15 +151,24 @@ class ChatRepository {
         .toList(growable: false);
     if (ids.isEmpty) return const [];
 
-    final clients = await WorkshopClientsService(client: _client).list(
-      workshopId,
-    );
+    // El panel de chat no debe quedar vacío si un perfil antiguo no puede
+    // consultarse. Las conversaciones y sus mensajes siguen siendo la fuente
+    // oficial y se muestran con el nombre genérico mientras llega el perfil.
+    List<WorkshopClientRecord> clients = const [];
+    try {
+      clients = await WorkshopClientsService(client: _client).list(workshopId);
+    } catch (_) {}
     final clientsById = {for (final client in clients) client.userId: client};
-    final rows = await _client
-        .from('messages')
-        .select('conversation_id, sender_id, body, attachment_path, read_at, created_at')
-        .inFilter('conversation_id', ids)
-        .order('created_at', ascending: false);
+    List<dynamic> rows = const [];
+    try {
+      rows = await _client
+          .from('messages')
+          .select(
+            'conversation_id, sender_id, body, attachment_path, read_at, created_at',
+          )
+          .inFilter('conversation_id', ids)
+          .order('created_at', ascending: false);
+    } catch (_) {}
     final currentId = currentUserId;
     final latest = <String, Map<String, dynamic>>{};
     final unread = <String, int>{};
@@ -173,45 +182,47 @@ class ChatRepository {
         unread.update(conversationId, (count) => count + 1, ifAbsent: () => 1);
       }
     }
-    return conversations.map((conversation) {
-      final conversationId = conversation['id']?.toString() ?? '';
-      final clientId = conversation['client_id']?.toString() ?? '';
-      final client = clientsById[clientId];
-      final message = latest[conversationId];
-      final body = message?['body']?.toString().trim() ?? '';
-      final hasAttachment =
-          (message?['attachment_path']?.toString().trim() ?? '').isNotEmpty;
-      return WorkshopChatPreview(
-        conversationId: conversationId,
-        clientId: clientId,
-        clientName: client?.fullName.trim().isNotEmpty == true
-            ? client!.fullName
-            : 'Cliente',
-        avatarUrl: client?.avatarUrl,
-        lastMessage: body.isNotEmpty
-            ? body
-            : hasAttachment
-            ? 'Adjunto enviado'
-            : 'Sin mensajes todavía',
-        updatedAt: DateTime.tryParse(
-          message?['created_at']?.toString() ??
-              conversation['last_message_at']?.toString() ??
-              '',
-        ),
-        unreadCount: unread[conversationId] ?? 0,
-      );
-    }).toList(growable: false);
+    return conversations
+        .map((conversation) {
+          final conversationId = conversation['id']?.toString() ?? '';
+          final clientId = conversation['client_id']?.toString() ?? '';
+          final client = clientsById[clientId];
+          final message = latest[conversationId];
+          final body = message?['body']?.toString().trim() ?? '';
+          final hasAttachment =
+              (message?['attachment_path']?.toString().trim() ?? '').isNotEmpty;
+          return WorkshopChatPreview(
+            conversationId: conversationId,
+            clientId: clientId,
+            clientName: client?.fullName.trim().isNotEmpty == true
+                ? client!.fullName
+                : 'Cliente',
+            avatarUrl: client?.avatarUrl,
+            lastMessage: body.isNotEmpty
+                ? body
+                : hasAttachment
+                ? 'Adjunto enviado'
+                : 'Sin mensajes todavía',
+            updatedAt: DateTime.tryParse(
+              message?['created_at']?.toString() ??
+                  conversation['last_message_at']?.toString() ??
+                  '',
+            ),
+            unreadCount: unread[conversationId] ?? 0,
+          );
+        })
+        .toList(growable: false);
   }
 
   Future<void> markConversationRead(String conversationId) async {
-    final user = _client.auth.currentUser;
-    if (user == null) return;
-    await _client
-        .from('messages')
-        .update({'read_at': DateTime.now().toUtc().toIso8601String()})
-        .eq('conversation_id', conversationId)
-        .neq('sender_id', user.id)
-        .isFilter('read_at', null);
+    if (_client.auth.currentUser == null) return;
+    // Una falla al marcar como leído nunca debe impedir abrir el chat.
+    try {
+      await _client.rpc(
+        'mark_conversation_read',
+        params: {'target_conversation_id': conversationId},
+      );
+    } catch (_) {}
   }
 
   Future<void> sendMessage({

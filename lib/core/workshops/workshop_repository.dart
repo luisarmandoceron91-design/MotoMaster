@@ -112,7 +112,10 @@ class WorkshopRepository {
         .select()
         .inFilter('id', ids)
         .isFilter('deleted_at', null)
-        .order('name');
+        // Al abrir en un equipo nuevo no existe un tenant en caché. Preferimos
+        // el taller administrado más reciente, en vez del nombre alfabético de
+        // una antigua plantilla (por ejemplo "MOTO MASTER").
+        .order('created_at', ascending: false);
     return rows.map(_workshopFromRow).toList();
   }
 
