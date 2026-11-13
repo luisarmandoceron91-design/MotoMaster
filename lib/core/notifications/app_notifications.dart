@@ -32,10 +32,15 @@ class _AppNotificationsButtonState extends State<AppNotificationsButton> {
         .map((item) => item['id'].toString())
         .toList();
     if (unread.isNotEmpty) {
-      await _client
-          .from('user_notifications')
-          .update({'read_at': DateTime.now().toUtc().toIso8601String()})
-          .inFilter('id', unread);
+      // Abrir la bandeja es más importante que confirmar la lectura. Si una
+      // política de seguridad demora o rechaza esta actualización, la persona
+      // aún puede ver y abrir la notificación correspondiente.
+      try {
+        await _client
+            .from('user_notifications')
+            .update({'read_at': DateTime.now().toUtc().toIso8601String()})
+            .inFilter('id', unread);
+      } catch (_) {}
     }
     if (!mounted) return;
     await showModalBottomSheet<void>(

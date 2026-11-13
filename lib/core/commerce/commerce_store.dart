@@ -50,20 +50,25 @@ class CommerceStore {
       // Aquellas publicaciones permanecían solo en el teléfono porque Supabase
       // rechazaba su id local y el marcador anterior evitaba un nuevo intento.
       final migrationKey = 'commerce_cloud_migrated_v2_$workshopId';
-      if (localForWorkshop.isNotEmpty &&
-          !(prefs.getBool(migrationKey) ?? false)) {
-        try {
-          // Se insertan una por una para que un registro antiguo defectuoso no
-          // bloquee el resto del catálogo. Si el id no es UUID, Supabase crea
-          // uno válido y el producto queda disponible en todos los equipos.
-          for (final product in localForWorkshop) {
+      var migrationCompleted = prefs.getBool(migrationKey) ?? false;
+      if (localForWorkshop.isNotEmpty && !migrationCompleted) {
+        // Se insertan una por una. Así una publicación antigua dañada no evita
+        // que las demás fotos y productos del teléfono lleguen a Supabase.
+        // Conservamos la copia técnica hasta terminar: nunca se borra un
+        // catálogo del celular mientras tenga registros sin sincronizar.
+        var allUploaded = true;
+        for (final product in localForWorkshop) {
+          try {
             await ApiClient().client
                 .from('products')
                 .upsert(_cloudMigrationPayload(product));
+          } catch (_) {
+            allUploaded = false;
           }
+        }
+        if (allUploaded) {
           await prefs.setBool(migrationKey, true);
-        } catch (_) {
-          // La lectura de abajo continúa para clientes y sesiones de solo lectura.
+          migrationCompleted = true;
         }
       } else if (prefs.getBool(migrationKey) == null) {
         await prefs.setBool(migrationKey, true);
@@ -76,13 +81,22 @@ class CommerceStore {
         final cloud = rows
             .map((row) => _cloudProduct(Map<String, dynamic>.from(row)))
             .toList();
-        // Supabase es la fuente oficial. Nunca mezclamos registros viejos del
-        // dispositivo con la respuesta, porque eso hacía que un celular y un
-        // computador mostraran catálogos diferentes.
+        // Supabase es la fuente oficial una vez completada la migración. Si
+        // queda algún envío pendiente conservamos temporalmente ese producto
+        // en el teléfono para reintentarlo, en vez de perderlo al actualizar.
         final withoutWorkshop = all
             .where((item) => item.workshopId != workshopId)
             .toList();
-        all = [...withoutWorkshop, ...cloud];
+        final pendingLocal = migrationCompleted
+            ? const <CommerceProduct>[]
+            : localForWorkshop.where((local) {
+                return !cloud.any(
+                  (remote) =>
+                      remote.id == local.id ||
+                      (remote.sku.isNotEmpty && remote.sku == local.sku),
+                );
+              }).toList();
+        all = [...withoutWorkshop, ...cloud, ...pendingLocal];
         await _saveProducts(all); // caché técnica, no fuente de verdad.
       } catch (_) {
         // No mostramos una copia antigua como si fuera el catálogo oficial.

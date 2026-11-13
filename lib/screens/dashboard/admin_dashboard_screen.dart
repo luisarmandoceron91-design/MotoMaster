@@ -421,6 +421,7 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
       const WorkshopDashboardPreferences();
   int _selected = 0;
   int _refreshToken = 0;
+  bool _refreshing = false;
   String? _pendingChatConversationId;
 
   WorkshopBrand get brand => widget.brand;
@@ -434,6 +435,23 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
   Future<void> _loadPreferences() async {
     final value = await _preferencesStore.load(widget.workshopId);
     if (mounted) setState(() => _preferences = value);
+  }
+
+  Future<void> _refreshFromCloud() async {
+    if (_refreshing) return;
+    setState(() {
+      _refreshing = true;
+      _refreshToken++;
+    });
+    // Cada panel se reconstruye y vuelve a consultar Supabase. El notifier
+    // despierta además los catálogos que estén abiertos en otra sección.
+    CommerceStore.revision.value++;
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
+    setState(() => _refreshing = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Datos actualizados desde la nube.')),
+    );
   }
 
   Future<void> _openPersonalization() async {
@@ -513,8 +531,13 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
           actions: [
             IconButton(
               tooltip: 'Actualizar datos desde la nube',
-              onPressed: () => setState(() => _refreshToken++),
-              icon: const Icon(Icons.refresh_rounded),
+              onPressed: _refreshing ? null : _refreshFromCloud,
+              icon: _refreshing
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh_rounded),
             ),
             AppNotificationsButton(
               color: brand.accentColor,
@@ -1745,18 +1768,12 @@ class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
                       ),
                     ],
                   );
-                  if (constraints.maxWidth < 620) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [info, const SizedBox(height: 8), picker],
-                    );
-                  }
-                  return Row(
-                    children: [
-                      Expanded(child: info),
-                      const SizedBox(width: 12),
-                      picker,
-                    ],
+                  // Agenda usa una sola columna tanto en móvil como escritorio.
+                  // Antes el Row recibía un ancho no acotado en escritorio y
+                  // comprimía los textos hasta mostrarlos letra por letra.
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [info, const SizedBox(height: 12), picker],
                   );
                 },
               ),
@@ -2259,187 +2276,203 @@ class _WorkshopChatPanel extends StatelessWidget {
         _openConversation(context, conversationId);
       });
     }
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xE8191B1F),
-        border: Border.all(color: brand.accentColor.withValues(alpha: .45)),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.forum_outlined, color: brand.accentColor),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Chat con clientes',
-                      style: TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      'Solo aparecen conversaciones iniciadas con este taller.',
-                      style: TextStyle(color: Color(0xFFBFC2C7), fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              Chip(
-                avatar: const Icon(Icons.lock_outline_rounded, size: 16),
-                label: const Text('Privado por taller'),
-                side: BorderSide(
-                  color: brand.accentColor.withValues(alpha: .5),
-                ),
-              ),
-            ],
+    return Align(
+      alignment: Alignment.topLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 780),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: const Color(0xE8191B1F),
+            border: Border.all(color: brand.accentColor.withValues(alpha: .45)),
+            borderRadius: BorderRadius.circular(12),
           ),
-          const SizedBox(height: 14),
-          if (!ApiClient.cloudEnabled)
-            ValueListenableBuilder<int>(
-              valueListenable: LocalChatStore.revision,
-              builder: (context, _, _) =>
-                  FutureBuilder<List<LocalChatConversation>>(
-                    future: LocalChatStore().listConversations(workshopId),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return LinearProgressIndicator(
-                          color: brand.accentColor,
-                        );
-                      }
-                      final conversations = snapshot.data!;
-                      if (conversations.isEmpty) {
-                        return const Text(
-                          'Todavía no hay conversaciones con clientes.',
-                          style: TextStyle(color: Color(0xFFBFC2C7)),
-                        );
-                      }
-                      return Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          for (final conversation in conversations)
-                            SizedBox(
-                              width: 320,
-                              child: ListTile(
-                                tileColor: const Color(0xFF22252A),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  side: const BorderSide(
-                                    color: Color(0xFF3A3E45),
-                                  ),
-                                ),
-                                leading: CircleAvatar(
-                                  backgroundColor: brand.accentColor.withValues(
-                                    alpha: .15,
-                                  ),
-                                  foregroundColor: brand.accentColor,
-                                  child: Text(
-                                    conversation.clientName.trim().isEmpty
-                                        ? 'C'
-                                        : conversation.clientName
-                                              .trim()[0]
-                                              .toUpperCase(),
-                                  ),
-                                ),
-                                title: Text(
-                                  conversation.clientName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  conversation.lastMessage,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                trailing: const Icon(
-                                  Icons.chevron_right_rounded,
-                                ),
-                                onTap: () => _openLocalConversation(
-                                  context,
-                                  conversation,
-                                ),
-                              ),
-                            ),
-                        ],
-                      );
-                    },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.forum_outlined, color: brand.accentColor),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Chat con clientes',
+                          style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          'Solo aparecen conversaciones iniciadas con este taller.',
+                          style: TextStyle(
+                            color: Color(0xFFBFC2C7),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-            ),
-          if (ApiClient.cloudEnabled) ...[
-            const SizedBox(height: 18),
-            const Divider(),
-            const SizedBox(height: 8),
-            StreamBuilder<List<Map<String, dynamic>>>(
-              stream: ChatRepository().watchWorkshopConversations(workshopId),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return const Text(
-                    'No fue posible cargar los mensajes en este momento.',
-                    style: TextStyle(color: Color(0xFFFF8589)),
-                  );
-                }
-                if (!snapshot.hasData) {
-                  return LinearProgressIndicator(color: brand.accentColor);
-                }
-                final conversations = snapshot.data!;
-                if (conversations.isEmpty) {
-                  return const Text(
-                    'Todavía no hay conversaciones con clientes.',
-                    style: TextStyle(color: Color(0xFFBFC2C7)),
-                  );
-                }
-                return FutureBuilder<List<WorkshopChatPreview>>(
-                  future: ChatRepository().workshopPreviews(
-                    workshopId: workshopId,
-                    conversations: conversations,
+                  Chip(
+                    avatar: const Icon(Icons.lock_outline_rounded, size: 16),
+                    label: const Text('Privado por taller'),
+                    side: BorderSide(
+                      color: brand.accentColor.withValues(alpha: .5),
+                    ),
                   ),
-                  builder: (context, previewSnapshot) {
-                    if (previewSnapshot.hasError) {
+                ],
+              ),
+              const SizedBox(height: 14),
+              if (!ApiClient.cloudEnabled)
+                ValueListenableBuilder<int>(
+                  valueListenable: LocalChatStore.revision,
+                  builder: (context, _, _) =>
+                      FutureBuilder<List<LocalChatConversation>>(
+                        future: LocalChatStore().listConversations(workshopId),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return LinearProgressIndicator(
+                              color: brand.accentColor,
+                            );
+                          }
+                          final conversations = snapshot.data!;
+                          if (conversations.isEmpty) {
+                            return const Text(
+                              'Todavía no hay conversaciones con clientes.',
+                              style: TextStyle(color: Color(0xFFBFC2C7)),
+                            );
+                          }
+                          return Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              for (final conversation in conversations)
+                                SizedBox(
+                                  width: 320,
+                                  child: ListTile(
+                                    tileColor: const Color(0xFF22252A),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      side: const BorderSide(
+                                        color: Color(0xFF3A3E45),
+                                      ),
+                                    ),
+                                    leading: CircleAvatar(
+                                      backgroundColor: brand.accentColor
+                                          .withValues(alpha: .15),
+                                      foregroundColor: brand.accentColor,
+                                      child: Text(
+                                        conversation.clientName.trim().isEmpty
+                                            ? 'C'
+                                            : conversation.clientName
+                                                  .trim()[0]
+                                                  .toUpperCase(),
+                                      ),
+                                    ),
+                                    title: Text(
+                                      conversation.clientName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      conversation.lastMessage,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    trailing: const Icon(
+                                      Icons.chevron_right_rounded,
+                                    ),
+                                    onTap: () => _openLocalConversation(
+                                      context,
+                                      conversation,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                ),
+              if (ApiClient.cloudEnabled) ...[
+                const SizedBox(height: 18),
+                const Divider(),
+                const SizedBox(height: 8),
+                StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: ChatRepository().watchWorkshopConversations(
+                    workshopId,
+                  ),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
                       return const Text(
-                        'No fue posible cargar los datos de las conversaciones.',
+                        'No fue posible cargar los mensajes en este momento.',
                         style: TextStyle(color: Color(0xFFFF8589)),
                       );
                     }
-                    if (!previewSnapshot.hasData) {
+                    if (!snapshot.hasData) {
                       return LinearProgressIndicator(color: brand.accentColor);
                     }
-                    final previews = previewSnapshot.data!;
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF171A1E),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFF343941)),
+                    final conversations = snapshot.data!;
+                    if (conversations.isEmpty) {
+                      return const Text(
+                        'Todavía no hay conversaciones con clientes.',
+                        style: TextStyle(color: Color(0xFFBFC2C7)),
+                      );
+                    }
+                    return FutureBuilder<List<WorkshopChatPreview>>(
+                      future: ChatRepository().workshopPreviews(
+                        workshopId: workshopId,
+                        conversations: conversations,
                       ),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: previews.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) => _CloudConversationTile(
-                          preview: previews[index],
-                          accent: brand.accentColor,
-                          onTap: () => _openConversation(
-                            context,
-                            previews[index].conversationId,
+                      builder: (context, previewSnapshot) {
+                        if (previewSnapshot.hasError) {
+                          return const Text(
+                            'No fue posible cargar los datos de las conversaciones.',
+                            style: TextStyle(color: Color(0xFFFF8589)),
+                          );
+                        }
+                        if (!previewSnapshot.hasData) {
+                          return LinearProgressIndicator(
+                            color: brand.accentColor,
+                          );
+                        }
+                        final previews = previewSnapshot.data!;
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF171A1E),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFF343941)),
                           ),
-                        ),
-                      ),
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: previews.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) =>
+                                _CloudConversationTile(
+                                  preview: previews[index],
+                                  accent: brand.accentColor,
+                                  onTap: () => _openConversation(
+                                    context,
+                                    previews[index].conversationId,
+                                    clientName: previews[index].clientName,
+                                    avatarUrl: previews[index].avatarUrl,
+                                  ),
+                                ),
+                          ),
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
-          ],
-        ],
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2455,8 +2488,8 @@ class _WorkshopChatPanel extends StatelessWidget {
       builder: (context) => AlertDialog(
         title: Text('Conversación con ${conversation.clientName}'),
         content: SizedBox(
-          width: 560,
-          height: 520,
+          width: 480,
+          height: 460,
           child: Column(
             children: [
               Expanded(
@@ -2568,8 +2601,10 @@ class _WorkshopChatPanel extends StatelessWidget {
 
   Future<void> _openConversation(
     BuildContext context,
-    String conversationId,
-  ) async {
+    String conversationId, {
+    String clientName = 'Cliente',
+    String? avatarUrl,
+  }) async {
     final repository = ChatRepository();
     await repository.markConversationRead(conversationId);
     if (!context.mounted) return;
@@ -2577,10 +2612,53 @@ class _WorkshopChatPanel extends StatelessWidget {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Conversación con el cliente'),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: brand.accentColor.withValues(alpha: .18),
+              foregroundImage: avatarUrl == null || avatarUrl.isEmpty
+                  ? null
+                  : NetworkImage(avatarUrl),
+              child: avatarUrl == null || avatarUrl.isEmpty
+                  ? Text(
+                      clientName.trim().isEmpty
+                          ? 'C'
+                          : clientName.trim().characters.first.toUpperCase(),
+                      style: TextStyle(
+                        color: brand.accentColor,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    clientName.trim().isEmpty ? 'Cliente' : clientName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 18),
+                  ),
+                  const Text(
+                    'Conversación privada',
+                    style: TextStyle(
+                      color: Color(0xFFBFC2C7),
+                      fontSize: 11,
+                      fontWeight: FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         content: SizedBox(
-          width: 560,
-          height: 520,
+          width: 480,
+          height: 460,
           child: Column(
             children: [
               Expanded(
