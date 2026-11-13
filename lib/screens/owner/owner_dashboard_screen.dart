@@ -660,6 +660,13 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                         ),
                         actions: [
                           IconButton(
+                            tooltip: 'Actualizar datos desde la nube',
+                            onPressed: _loadingCloudData
+                                ? null
+                                : () => _loadCloudData(),
+                            icon: const Icon(Icons.refresh_rounded),
+                          ),
+                          IconButton(
                             tooltip: 'Notificaciones',
                             onPressed: _showNotifications,
                             icon: Badge(
@@ -1826,18 +1833,23 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final newToday = _workshops
-        .where((workshop) =>
-            !workshop.isDeleted &&
-            workshop.createdAt != null &&
-            !workshop.createdAt!.isBefore(today))
+        .where(
+          (workshop) =>
+              !workshop.isDeleted &&
+              workshop.createdAt != null &&
+              !workshop.createdAt!.isBefore(today),
+        )
         .toList();
-    final trials = _workshops
-        .where((workshop) =>
-            !workshop.isDeleted &&
-            workshop.status == 'Prueba' &&
-            workshop.trialEndsAt != null)
-        .toList()
-      ..sort((a, b) => a.trialEndsAt!.compareTo(b.trialEndsAt!));
+    final trials =
+        _workshops
+            .where(
+              (workshop) =>
+                  !workshop.isDeleted &&
+                  workshop.status == 'Prueba' &&
+                  workshop.trialEndsAt != null,
+            )
+            .toList()
+          ..sort((a, b) => a.trialEndsAt!.compareTo(b.trialEndsAt!));
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -1863,9 +1875,14 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 for (final workshop in newToday)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.storefront_outlined, color: _success),
+                    leading: const Icon(
+                      Icons.storefront_outlined,
+                      color: _success,
+                    ),
                     title: Text(workshop.name),
-                    subtitle: Text('${workshop.location.isEmpty ? 'Ubicación pendiente' : workshop.location} · nuevo registro'),
+                    subtitle: Text(
+                      '${workshop.location.isEmpty ? 'Ubicación pendiente' : workshop.location} · nuevo registro',
+                    ),
                     onTap: () {
                       Navigator.pop(sheetContext);
                       setState(() => _section = _Section.workshops);
@@ -1883,12 +1900,17 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(
                       Icons.hourglass_bottom_rounded,
-                      color: workshop.trialEndsAt!.isBefore(now.add(const Duration(days: 2)))
+                      color:
+                          workshop.trialEndsAt!.isBefore(
+                            now.add(const Duration(days: 2)),
+                          )
                           ? _danger
                           : _warning,
                     ),
                     title: Text(workshop.name),
-                    subtitle: Text('Prueba vence ${_trialTimeRemaining(workshop.trialEndsAt!, now)}'),
+                    subtitle: Text(
+                      'Prueba vence ${_trialTimeRemaining(workshop.trialEndsAt!, now)}',
+                    ),
                     onTap: () {
                       Navigator.pop(sheetContext);
                       setState(() => _section = _Section.workshops);
