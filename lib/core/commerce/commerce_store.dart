@@ -46,14 +46,19 @@ class CommerceStore {
       // Un administrador puede estar terminando una migración desde un
       // dispositivo antiguo. Un cliente no tiene permiso para esta escritura,
       // pero eso nunca debe impedirle leer el catálogo oficial.
-      if (localForWorkshop.isNotEmpty) {
+      final migrationKey = 'commerce_cloud_migrated_$workshopId';
+      if (localForWorkshop.isNotEmpty &&
+          !(prefs.getBool(migrationKey) ?? false)) {
         try {
           await ApiClient().client
               .from('products')
               .upsert(localForWorkshop.map(_cloudPayload).toList());
+          await prefs.setBool(migrationKey, true);
         } catch (_) {
           // La lectura de abajo continúa para clientes y sesiones de solo lectura.
         }
+      } else if (prefs.getBool(migrationKey) == null) {
+        await prefs.setBool(migrationKey, true);
       }
       try {
         final rows = await ApiClient().client
@@ -63,15 +68,18 @@ class CommerceStore {
         final cloud = rows
             .map((row) => _cloudProduct(Map<String, dynamic>.from(row)))
             .toList();
-        final merged = <String, CommerceProduct>{
-          for (final product in all) product.id: product,
-          for (final product in cloud) product.id: product,
-        };
-        all = merged.values.toList();
-        await _saveProducts(all);
+        // Supabase es la fuente oficial. Nunca mezclamos registros viejos del
+        // dispositivo con la respuesta, porque eso hacía que un celular y un
+        // computador mostraran catálogos diferentes.
+        final withoutWorkshop = all
+            .where((item) => item.workshopId != workshopId)
+            .toList();
+        all = [...withoutWorkshop, ...cloud];
+        await _saveProducts(all); // caché técnica, no fuente de verdad.
       } catch (_) {
-        // Se mantiene el catálogo local si temporalmente no hay conexión o
-        // la migración de catálogo aún está aplicándose.
+        // No mostramos una copia antigua como si fuera el catálogo oficial.
+        // Al volver a intentar se consultará de nuevo la nube.
+        return const [];
       }
     }
     final items = all.where((item) => item.workshopId == workshopId).toList();
@@ -106,7 +114,7 @@ class CommerceStore {
       // base de datos la rechazó: el administrador puede corregir el error.
       await ApiClient().client.from('products').upsert(_cloudPayload(product));
     }
-    await _saveProducts(all);
+    await _saveProducts(all); // solo acelera la siguiente lectura; la nube manda.
     final difference = product.stock - previousStock;
     if (difference != 0) {
       await _appendMovement(

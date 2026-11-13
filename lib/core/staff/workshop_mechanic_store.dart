@@ -106,14 +106,20 @@ class WorkshopMechanicStore {
           .toList(growable: false);
       // Importa copias antiguas cuando la sesión tiene rol de taller. Si la
       // sesión es de cliente, el rechazo de escritura no bloquea la lectura.
-      if (localForWorkshop.isNotEmpty) {
+      final preferences = await SharedPreferences.getInstance();
+      final migrationKey = 'mechanics_cloud_migrated_$workshopId';
+      if (localForWorkshop.isNotEmpty &&
+          !(preferences.getBool(migrationKey) ?? false)) {
         try {
           await ApiClient().client
               .from('workshop_mechanics')
               .upsert(localForWorkshop.map((item) => item.toMap()).toList());
+          await preferences.setBool(migrationKey, true);
         } catch (_) {
           // Un cliente no puede editar el equipo, pero sí debe poder verlo.
         }
+      } else if (preferences.getBool(migrationKey) == null) {
+        await preferences.setBool(migrationKey, true);
       }
       try {
         final rows = await ApiClient().client
@@ -125,14 +131,16 @@ class WorkshopMechanicStore {
               (row) => WorkshopMechanic.fromMap(Map<String, dynamic>.from(row)),
             )
             .toList();
-        all = {
-          for (final mechanic in all) mechanic.id: mechanic,
-          for (final mechanic in cloud) mechanic.id: mechanic,
-        }.values.toList();
+        // La lista publicada en Supabase es la única lista oficial. Evitar la
+        // mezcla con SharedPreferences impide que equipos distintos vean
+        // mecánicos distintos para el mismo taller.
+        all = [
+          ...all.where((item) => item.workshopId != workshopId),
+          ...cloud,
+        ];
         await _saveAll(all);
       } catch (_) {
-        // La copia local permite trabajar sin conexión; al recuperar red se
-        // vuelve a leer la fuente oficial de la nube.
+        return const [];
       }
     }
     final items =

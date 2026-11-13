@@ -420,6 +420,7 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
   WorkshopDashboardPreferences _preferences =
       const WorkshopDashboardPreferences();
   int _selected = 0;
+  int _refreshToken = 0;
 
   WorkshopBrand get brand => widget.brand;
 
@@ -509,6 +510,11 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
             ],
           ),
           actions: [
+            IconButton(
+              tooltip: 'Actualizar datos desde la nube',
+              onPressed: () => setState(() => _refreshToken++),
+              icon: const Icon(Icons.refresh_rounded),
+            ),
             AppNotificationsButton(
               color: brand.accentColor,
               onOpen: (notification) {
@@ -687,7 +693,10 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1380),
-          child: content,
+          child: KeyedSubtree(
+            key: ValueKey('section-$_selected-refresh-$_refreshToken'),
+            child: content,
+          ),
         ),
       ),
     );
@@ -2353,42 +2362,44 @@ class _WorkshopChatPanel extends StatelessWidget {
                   style: TextStyle(color: Color(0xFFBFC2C7)),
                 );
               }
-              return Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  for (final conversation in conversations)
-                    SizedBox(
-                      width: 300,
-                      child: ListTile(
-                        tileColor: const Color(0xFF22252A),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          side: const BorderSide(color: Color(0xFF3A3E45)),
-                        ),
-                        leading: CircleAvatar(
-                          backgroundColor: brand.accentColor.withValues(
-                            alpha: .15,
-                          ),
-                          foregroundColor: brand.accentColor,
-                          child: const Icon(Icons.person_outline_rounded),
-                        ),
-                        title: const Text(
-                          'Cliente del taller',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        subtitle: Text(
-                          'Conversación ${conversation['client_id'].toString().substring(0, 8)}',
-                          maxLines: 1,
-                        ),
-                        trailing: const Icon(Icons.chevron_right_rounded),
+              return FutureBuilder<List<WorkshopChatPreview>>(
+                future: ChatRepository().workshopPreviews(
+                  workshopId: workshopId,
+                  conversations: conversations,
+                ),
+                builder: (context, previewSnapshot) {
+                  if (previewSnapshot.hasError) {
+                    return const Text(
+                      'No fue posible cargar los datos de las conversaciones.',
+                      style: TextStyle(color: Color(0xFFFF8589)),
+                    );
+                  }
+                  if (!previewSnapshot.hasData) {
+                    return LinearProgressIndicator(color: brand.accentColor);
+                  }
+                  final previews = previewSnapshot.data!;
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF171A1E),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFF343941)),
+                    ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: previews.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) => _CloudConversationTile(
+                        preview: previews[index],
+                        accent: brand.accentColor,
                         onTap: () => _openConversation(
                           context,
-                          conversation['id'].toString(),
+                          previews[index].conversationId,
                         ),
                       ),
                     ),
-                ],
+                  );
+                },
               );
             },
           ),
@@ -2633,6 +2644,88 @@ class _WorkshopChatPanel extends StatelessWidget {
       ),
     );
     controller.dispose();
+  }
+}
+
+class _CloudConversationTile extends StatelessWidget {
+  const _CloudConversationTile({
+    required this.preview,
+    required this.accent,
+    required this.onTap,
+  });
+
+  final WorkshopChatPreview preview;
+  final Color accent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = preview.clientName.trim();
+    final stamp = preview.updatedAt;
+    final time = stamp == null
+        ? ''
+        : '${stamp.day.toString().padLeft(2, '0')}/${stamp.month.toString().padLeft(2, '0')} ${stamp.hour.toString().padLeft(2, '0')}:${stamp.minute.toString().padLeft(2, '0')}';
+    return ListTile(
+      minVerticalPadding: 12,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      onTap: onTap,
+      leading: CircleAvatar(
+        radius: 26,
+        backgroundColor: accent.withValues(alpha: .18),
+        foregroundImage: preview.avatarUrl == null
+            ? null
+            : NetworkImage(preview.avatarUrl!),
+        child: preview.avatarUrl == null
+            ? Text(
+                name.isEmpty ? 'C' : name.characters.first.toUpperCase(),
+                style: TextStyle(
+                  color: accent,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                ),
+              )
+            : null,
+      ),
+      title: Text(
+        name.isEmpty ? 'Cliente' : name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.w800),
+      ),
+      subtitle: Text(
+        preview.lastMessage,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: Color(0xFFBFC2C7)),
+      ),
+      trailing: SizedBox(
+        width: 62,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (time.isNotEmpty)
+              Text(time, style: const TextStyle(fontSize: 11, color: Color(0xFFBFC2C7))),
+            const SizedBox(height: 5),
+            if (preview.unreadCount > 0)
+              Container(
+                constraints: const BoxConstraints(minWidth: 21, minHeight: 21),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+                alignment: Alignment.center,
+                child: Text(
+                  preview.unreadCount > 99 ? '99+' : '${preview.unreadCount}',
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

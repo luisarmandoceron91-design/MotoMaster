@@ -3452,6 +3452,11 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Actualizar datos desde la nube',
+            onPressed: _reload,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
           AppNotificationsButton(
             color: widget.brand.accentColor,
             onOpen: (notification) {

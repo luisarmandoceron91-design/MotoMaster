@@ -3,6 +3,30 @@ import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../networking/api_client.dart';
+import '../workshops/workshop_clients_service.dart';
+
+/// Datos que necesita el administrador para mostrar una conversación en la
+/// bandeja del taller. Todo se calcula desde Supabase: no depende de la copia
+/// guardada en el teléfono o computador que esté usando el administrador.
+class WorkshopChatPreview {
+  const WorkshopChatPreview({
+    required this.conversationId,
+    required this.clientId,
+    required this.clientName,
+    required this.lastMessage,
+    required this.updatedAt,
+    required this.unreadCount,
+    this.avatarUrl,
+  });
+
+  final String conversationId;
+  final String clientId;
+  final String clientName;
+  final String lastMessage;
+  final DateTime? updatedAt;
+  final int unreadCount;
+  final String? avatarUrl;
+}
 
 class ChatRepository {
   ChatRepository({SupabaseClient? client})
@@ -110,6 +134,73 @@ class ChatRepository {
         .eq('workshop_id', workshopId)
         .order('last_message_at', ascending: false)
         .map((rows) => rows.cast<Map<String, dynamic>>());
+  }
+
+  /// Completa la lista de conversaciones del taller con el perfil real del
+  /// cliente, el último mensaje y los mensajes que aún no ha leído el taller.
+  /// Se llama cada vez que cambia el stream de conversaciones, por eso la
+  /// bandeja queda igual en celular, tableta y computador.
+  Future<List<WorkshopChatPreview>> workshopPreviews({
+    required String workshopId,
+    required List<Map<String, dynamic>> conversations,
+  }) async {
+    if (conversations.isEmpty) return const [];
+    final ids = conversations
+        .map((row) => row['id']?.toString() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toList(growable: false);
+    if (ids.isEmpty) return const [];
+
+    final clients = await WorkshopClientsService(client: _client).list(
+      workshopId,
+    );
+    final clientsById = {for (final client in clients) client.userId: client};
+    final rows = await _client
+        .from('messages')
+        .select('conversation_id, sender_id, body, attachment_path, read_at, created_at')
+        .inFilter('conversation_id', ids)
+        .order('created_at', ascending: false);
+    final currentId = currentUserId;
+    final latest = <String, Map<String, dynamic>>{};
+    final unread = <String, int>{};
+    for (final raw in rows) {
+      final message = Map<String, dynamic>.from(raw);
+      final conversationId = message['conversation_id']?.toString() ?? '';
+      if (conversationId.isEmpty) continue;
+      latest.putIfAbsent(conversationId, () => message);
+      if (message['sender_id']?.toString() != currentId &&
+          message['read_at'] == null) {
+        unread.update(conversationId, (count) => count + 1, ifAbsent: () => 1);
+      }
+    }
+    return conversations.map((conversation) {
+      final conversationId = conversation['id']?.toString() ?? '';
+      final clientId = conversation['client_id']?.toString() ?? '';
+      final client = clientsById[clientId];
+      final message = latest[conversationId];
+      final body = message?['body']?.toString().trim() ?? '';
+      final hasAttachment =
+          (message?['attachment_path']?.toString().trim() ?? '').isNotEmpty;
+      return WorkshopChatPreview(
+        conversationId: conversationId,
+        clientId: clientId,
+        clientName: client?.fullName.trim().isNotEmpty == true
+            ? client!.fullName
+            : 'Cliente',
+        avatarUrl: client?.avatarUrl,
+        lastMessage: body.isNotEmpty
+            ? body
+            : hasAttachment
+            ? 'Adjunto enviado'
+            : 'Sin mensajes todavía',
+        updatedAt: DateTime.tryParse(
+          message?['created_at']?.toString() ??
+              conversation['last_message_at']?.toString() ??
+              '',
+        ),
+        unreadCount: unread[conversationId] ?? 0,
+      );
+    }).toList(growable: false);
   }
 
   Future<void> markConversationRead(String conversationId) async {
