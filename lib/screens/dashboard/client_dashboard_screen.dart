@@ -4841,6 +4841,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
             time: time,
             notes: notes.text.trim(),
             mechanicName: selectedMechanic?.name ?? '',
+            requestedMechanicName: selectedMechanic?.name ?? '',
           ),
         );
         await _reload();

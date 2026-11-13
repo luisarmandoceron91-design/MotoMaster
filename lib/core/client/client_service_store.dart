@@ -86,6 +86,7 @@ class ClientAppointment {
     this.clientId = '',
     this.serviceStage = 'Cita solicitada',
     this.mechanicName = '',
+    this.requestedMechanicName = '',
     this.clientName = '',
     this.clientEmail = '',
     this.clientPhone = '',
@@ -104,6 +105,10 @@ class ClientAppointment {
   final String clientId;
   final String serviceStage;
   final String mechanicName;
+
+  /// Mecánico escogido por el cliente al solicitar la cita. Se conserva aun
+  /// si luego el administrador debe reasignar el trabajo.
+  final String requestedMechanicName;
   final String clientName;
   final String clientEmail;
   final String clientPhone;
@@ -133,6 +138,7 @@ class ClientAppointment {
     String? clientId,
     String? serviceStage,
     String? mechanicName,
+    String? requestedMechanicName,
     String? clientName,
     String? clientEmail,
     String? clientPhone,
@@ -150,6 +156,7 @@ class ClientAppointment {
     clientId: clientId ?? this.clientId,
     serviceStage: serviceStage ?? this.serviceStage,
     mechanicName: mechanicName ?? this.mechanicName,
+    requestedMechanicName: requestedMechanicName ?? this.requestedMechanicName,
     clientName: clientName ?? this.clientName,
     clientEmail: clientEmail ?? this.clientEmail,
     clientPhone: clientPhone ?? this.clientPhone,
@@ -169,6 +176,7 @@ class ClientAppointment {
     'client_id': clientId,
     'service_stage': serviceStage,
     'mechanic_name': mechanicName,
+    'requested_mechanic_name': requestedMechanicName,
     'client_name': clientName,
     'client_email': clientEmail,
     'client_phone': clientPhone,
@@ -193,6 +201,7 @@ class ClientAppointment {
       clientId: map['client_id']?.toString() ?? '',
       serviceStage: map['service_stage']?.toString() ?? 'Cita solicitada',
       mechanicName: map['mechanic_name']?.toString() ?? '',
+      requestedMechanicName: map['requested_mechanic_name']?.toString() ?? '',
       clientName:
           map['client_name']?.toString() ??
           profile['full_name']?.toString() ??
@@ -409,6 +418,8 @@ class ClientServiceStore {
               'service_type': saved.serviceType,
               'motorcycle_name': saved.motorcycleName,
               'service_stage': saved.serviceStage,
+              'mechanic_name': saved.mechanicName,
+              'requested_mechanic_name': saved.requestedMechanicName,
               'reason': saved.notes,
               'status': 'requested',
             })

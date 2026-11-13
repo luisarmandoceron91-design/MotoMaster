@@ -1590,6 +1590,41 @@ class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
+                      const SizedBox(height: 7),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: widget.brand.accentColor.withValues(
+                            alpha: .09,
+                          ),
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.engineering_outlined,
+                              size: 17,
+                              color: widget.brand.accentColor,
+                            ),
+                            const SizedBox(width: 7),
+                            Expanded(
+                              child: Text(
+                                item.requestedMechanicName.trim().isEmpty
+                                    ? 'Sin preferencia: asigna un mecánico disponible.'
+                                    : 'Mecánico solicitado por el cliente: ${item.requestedMechanicName}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                       if (item.notes.trim().isNotEmpty) ...[
                         const SizedBox(height: 9),
                         Container(
@@ -1667,7 +1702,7 @@ class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
                             ? item.mechanicName
                             : '',
                         isExpanded: true,
-                        hint: const Text('Asignar mecánico'),
+                        hint: const Text('Asignar mecánico disponible'),
                         underline: const SizedBox.shrink(),
                         items: [
                           const DropdownMenuItem(

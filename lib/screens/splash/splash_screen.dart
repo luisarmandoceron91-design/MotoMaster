@@ -7,7 +7,9 @@ import '../../core/auth/admin_oauth_intent_store.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/branding/workshop_brand.dart';
 import '../../core/tenant/tenant_context.dart';
+import '../../core/tenant/tenant_model.dart';
 import '../../core/client/client_profile_repository.dart';
+import '../../core/workshops/workshop_repository.dart';
 import '../dashboard/admin_dashboard_screen.dart';
 import '../owner/owner_dashboard_screen.dart';
 import '../access/role_access_screen.dart';
@@ -129,9 +131,33 @@ class _SplashScreenState extends State<SplashScreen>
           );
           return;
         }
-        if ((role == AdminAccessRole.workshopOwner ||
-                role == AdminAccessRole.workshopStaff) &&
-            widget.tenantContext.currentTenantId.isNotEmpty) {
+        if (role == AdminAccessRole.workshopOwner ||
+            role == AdminAccessRole.workshopStaff) {
+          // Una sesión puede reabrirse en otro computador con un tenant local
+          // antiguo. El taller activo debe resolverse desde la membresía en la
+          // nube, no desde SharedPreferences, para mostrar el mismo catálogo,
+          // chat, equipo e inventario en todos los dispositivos.
+          final managed = await WorkshopRepository().listManaged();
+          if (managed.isEmpty) {
+            throw StateError('No se encontró un taller administrativo activo.');
+          }
+          final currentId = widget.tenantContext.currentTenantId;
+          final workshop = managed.firstWhere(
+            (item) => item.id == currentId,
+            orElse: () => managed.first,
+          );
+          await widget.tenantContext.setTenant(
+            Tenant(tenantId: workshop.id, name: workshop.name),
+          );
+          widget.brandController.value = WorkshopBrand(
+            name: workshop.name,
+            tagline: workshop.tagline,
+            logoIndex: workshop.logoIndex,
+            accentColorValue: workshop.accentColorValue,
+            customLogoBytes: workshop.logoBytes,
+            customLogoFileName: workshop.logoFileName,
+          );
+          if (!mounted) return;
           final user = AuthService().currentUser;
           Navigator.of(context).pushReplacement(
             MaterialPageRoute<void>(
