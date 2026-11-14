@@ -2618,6 +2618,7 @@ class _WorkshopChatPanel extends StatelessWidget {
     await repository.markConversationRead(conversationId);
     if (!context.mounted) return;
     final controller = TextEditingController();
+    final messageScrollController = ScrollController();
     final selectedMessage = ValueNotifier<Map<String, dynamic>?>(null);
     final media = MediaQuery.sizeOf(context);
     final mobile = media.width < 600;
@@ -2789,7 +2790,15 @@ class _WorkshopChatPanel extends StatelessWidget {
                           ),
                         );
                       }
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!messageScrollController.hasClients) return;
+                        messageScrollController.jumpTo(
+                          messageScrollController.position.maxScrollExtent,
+                        );
+                      });
                       return ListView.builder(
+                        controller: messageScrollController,
+                        padding: const EdgeInsets.only(bottom: 88),
                         itemCount: messages.length,
                         itemBuilder: (context, index) {
                           final message = messages[index];
@@ -2900,6 +2909,7 @@ class _WorkshopChatPanel extends StatelessWidget {
       ),
     );
     controller.dispose();
+    messageScrollController.dispose();
     selectedMessage.dispose();
   }
 }

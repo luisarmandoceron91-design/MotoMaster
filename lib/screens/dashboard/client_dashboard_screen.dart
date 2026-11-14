@@ -1705,7 +1705,9 @@ class _SupportPageState extends State<_SupportPage> {
                   Expanded(
                     child: ListView(
                       controller: _messageScrollController,
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                      // El espacio inferior conserva visible el último mensaje
+                      // aunque el cuadro para escribir haya crecido varias líneas.
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 108),
                       children: [
                         const Center(child: _DayChip()),
                         if (_connecting)
