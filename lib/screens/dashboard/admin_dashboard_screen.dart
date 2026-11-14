@@ -2843,7 +2843,7 @@ class _WorkshopChatPanel extends StatelessWidget {
                       child: TextField(
                         controller: controller,
                         minLines: 1,
-                        maxLines: 4,
+                        maxLines: 10,
                         keyboardType: TextInputType.multiline,
                         textInputAction: TextInputAction.newline,
                         decoration: InputDecoration(

@@ -1808,16 +1808,36 @@ class _SupportPageState extends State<_SupportPage> {
                         Expanded(
                           child: TextField(
                             controller: _controller,
-                            onSubmitted: (_) => _send(),
+                            minLines: 1,
+                            maxLines: 10,
+                            keyboardType: TextInputType.multiline,
+                            textInputAction: TextInputAction.newline,
                             decoration: InputDecoration(
                               hintText: 'Escribe un mensaje...',
                               isDense: true,
                               filled: true,
                               fillColor: const Color(0xFF20262C),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 12,
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(24),
                                 borderSide: const BorderSide(
                                   color: Color(0xFF414850),
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFFDEE2E6),
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide(
+                                  color: widget.accent,
+                                  width: 2,
                                 ),
                               ),
                             ),
