@@ -122,7 +122,20 @@ class ChatRepository {
         .stream(primaryKey: ['id'])
         .eq('conversation_id', conversationId)
         .order('created_at')
-        .map((rows) => rows.cast<Map<String, dynamic>>());
+        // El stream de Realtime puede llegar en distinto orden según el
+        // dispositivo. Ordenamos nuevamente para que la conversación nunca
+        // invierta mensajes ni haga que parezcan desaparecer al actualizar.
+        .map((rows) {
+          final messages = rows
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList(growable: false);
+          messages.sort(
+            (a, b) => (a['created_at']?.toString() ?? '').compareTo(
+              b['created_at']?.toString() ?? '',
+            ),
+          );
+          return messages;
+        });
   }
 
   Stream<List<Map<String, dynamic>>> watchWorkshopConversations(
