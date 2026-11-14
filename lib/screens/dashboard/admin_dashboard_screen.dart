@@ -2842,9 +2842,38 @@ class _WorkshopChatPanel extends StatelessWidget {
                     Expanded(
                       child: TextField(
                         controller: controller,
-                        decoration: const InputDecoration(
+                        minLines: 1,
+                        maxLines: 4,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
+                        decoration: InputDecoration(
                           hintText: 'Escribe una respuesta...',
-                          prefixIcon: Icon(Icons.chat_bubble_outline_rounded),
+                          isDense: true,
+                          filled: true,
+                          fillColor: const Color(0xFF20262C),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 12,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(25),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF414850),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(25),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFDEE2E6),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(25),
+                            borderSide: BorderSide(
+                              color: brand.accentColor,
+                              width: 2,
+                            ),
+                          ),
                         ),
                       ),
                     ),
