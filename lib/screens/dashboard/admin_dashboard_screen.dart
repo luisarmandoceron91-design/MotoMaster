@@ -2632,6 +2632,11 @@ class _WorkshopChatPanel extends StatelessWidget {
           title: selected == null
               ? Row(
                   children: [
+                    IconButton(
+                      tooltip: 'Volver al panel del taller',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    ),
                     CircleAvatar(
                       radius: 20,
                       backgroundColor: brand.accentColor.withValues(alpha: .18),
@@ -2675,11 +2680,6 @@ class _WorkshopChatPanel extends StatelessWidget {
                           ),
                         ],
                       ),
-                    ),
-                    IconButton(
-                      tooltip: 'Cerrar conversación',
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close_rounded),
                     ),
                   ],
                 )
