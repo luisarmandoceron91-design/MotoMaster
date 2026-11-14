@@ -2618,155 +2618,260 @@ class _WorkshopChatPanel extends StatelessWidget {
     await repository.markConversationRead(conversationId);
     if (!context.mounted) return;
     final controller = TextEditingController();
+    final selectedMessage = ValueNotifier<Map<String, dynamic>?>(null);
+    final media = MediaQuery.sizeOf(context);
+    final mobile = media.width < 600;
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: brand.accentColor.withValues(alpha: .18),
-              foregroundImage: avatarUrl == null || avatarUrl.isEmpty
-                  ? null
-                  : NetworkImage(avatarUrl),
-              child: avatarUrl == null || avatarUrl.isEmpty
-                  ? Text(
-                      clientName.trim().isEmpty
-                          ? 'C'
-                          : clientName.trim().characters.first.toUpperCase(),
-                      style: TextStyle(
-                        color: brand.accentColor,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    clientName.trim().isEmpty ? 'Cliente' : clientName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                  const Text(
-                    'Conversación privada',
-                    style: TextStyle(
-                      color: Color(0xFFBFC2C7),
-                      fontSize: 11,
-                      fontWeight: FontWeight.normal,
+      builder: (dialogContext) => ValueListenableBuilder<Map<String, dynamic>?>(
+        valueListenable: selectedMessage,
+        builder: (context, selected, _) => AlertDialog(
+          insetPadding: mobile ? EdgeInsets.zero : const EdgeInsets.all(24),
+          titlePadding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+          contentPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+          title: selected == null
+              ? Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: brand.accentColor.withValues(alpha: .18),
+                      foregroundImage: avatarUrl == null || avatarUrl.isEmpty
+                          ? null
+                          : NetworkImage(avatarUrl),
+                      child: avatarUrl == null || avatarUrl.isEmpty
+                          ? Text(
+                              clientName.trim().isEmpty
+                                  ? 'C'
+                                  : clientName
+                                        .trim()
+                                        .characters
+                                        .first
+                                        .toUpperCase(),
+                              style: TextStyle(
+                                color: brand.accentColor,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            )
+                          : null,
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        content: SizedBox(
-          width: 480,
-          height: 460,
-          child: Column(
-            children: [
-              Expanded(
-                child: StreamBuilder<List<Map<String, dynamic>>>(
-                  stream: repository.watchMessages(conversationId),
-                  builder: (context, snapshot) {
-                    final messages = snapshot.data ?? const [];
-                    if (!snapshot.hasData) {
-                      return Center(
-                        child: CircularProgressIndicator(
-                          color: brand.accentColor,
-                        ),
-                      );
-                    }
-                    return ListView.builder(
-                      itemCount: messages.length,
-                      itemBuilder: (context, index) {
-                        final message = messages[index];
-                        final mine =
-                            message['sender_id'] == repository.currentUserId;
-                        return Align(
-                          alignment: mine
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                          child: Container(
-                            constraints: const BoxConstraints(maxWidth: 390),
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(11),
-                            decoration: BoxDecoration(
-                              color: mine
-                                  ? brand.accentColor
-                                  : const Color(0xFF292C31),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: _AdminCloudMessage(
-                              message: message,
-                              repository: repository,
-                              own: mine,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            clientName.trim().isEmpty ? 'Cliente' : clientName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 18),
+                          ),
+                          const Text(
+                            'Conversación privada',
+                            style: TextStyle(
+                              color: Color(0xFFBFC2C7),
+                              fontSize: 11,
+                              fontWeight: FontWeight.normal,
                             ),
                           ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Adjuntar foto o archivo',
-                    onPressed: () => _showAdminAttachmentMenu(
-                      context,
-                      brand.accentColor,
-                      repository,
-                      conversationId,
-                    ),
-                    icon: Icon(
-                      Icons.add_photo_alternate_outlined,
-                      color: brand.accentColor,
-                    ),
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      decoration: const InputDecoration(
-                        hintText: 'Escribe una respuesta...',
-                        prefixIcon: Icon(Icons.chat_bubble_outline_rounded),
+                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    tooltip: 'Enviar',
-                    onPressed: () async {
-                      final text = controller.text.trim();
-                      if (text.isEmpty) return;
-                      await repository.sendMessage(
-                        conversationId: conversationId,
-                        body: text,
+                    IconButton(
+                      tooltip: 'Cerrar conversación',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Cancelar selección',
+                      onPressed: () => selectedMessage.value = null,
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      tooltip: 'Copiar mensaje',
+                      onPressed: () async {
+                        final text = selected['body']?.toString().trim() ?? '';
+                        if (text.isNotEmpty) {
+                          await Clipboard.setData(ClipboardData(text: text));
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Mensaje copiado.')),
+                            );
+                          }
+                        }
+                        selectedMessage.value = null;
+                      },
+                      icon: const Icon(Icons.copy_outlined),
+                    ),
+                    if ((selected['attachment_path']?.toString() ?? '')
+                        .isNotEmpty)
+                      IconButton(
+                        tooltip: 'Descargar adjunto',
+                        onPressed: () async {
+                          final path = selected['attachment_path'].toString();
+                          final url = await repository.signedAttachmentUrl(
+                            path,
+                          );
+                          if (context.mounted) {
+                            await ChatAttachmentActions.download(
+                              context,
+                              url: url,
+                              fileName: path
+                                  .split('/')
+                                  .last
+                                  .replaceFirst(RegExp(r'^\\d+_'), ''),
+                            );
+                          }
+                          selectedMessage.value = null;
+                        },
+                        icon: const Icon(Icons.download_outlined),
+                      ),
+                    if (selected['sender_id'] == repository.currentUserId)
+                      IconButton(
+                        tooltip: 'Eliminar mensaje',
+                        color: Colors.redAccent,
+                        onPressed: () async {
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (confirmContext) => AlertDialog(
+                              title: const Text('¿Eliminar mensaje?'),
+                              content: const Text(
+                                'Se eliminará para ambas personas del chat.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(confirmContext, false),
+                                  child: const Text('Cancelar'),
+                                ),
+                                FilledButton.icon(
+                                  onPressed: () =>
+                                      Navigator.pop(confirmContext, true),
+                                  icon: const Icon(
+                                    Icons.delete_outline_rounded,
+                                  ),
+                                  label: const Text('Eliminar'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirmed == true) {
+                            await repository.deleteOwnMessage(
+                              messageId: selected['id'].toString(),
+                              attachmentPath: selected['attachment_path']
+                                  ?.toString(),
+                            );
+                          }
+                          selectedMessage.value = null;
+                        },
+                        icon: const Icon(Icons.delete_outline_rounded),
+                      ),
+                  ],
+                ),
+          content: SizedBox(
+            width: mobile ? media.width : 480,
+            height: mobile ? media.height - 82 : 460,
+            child: Column(
+              children: [
+                Expanded(
+                  child: StreamBuilder<List<Map<String, dynamic>>>(
+                    stream: repository.watchMessages(conversationId),
+                    builder: (context, snapshot) {
+                      final messages = snapshot.data ?? const [];
+                      if (!snapshot.hasData) {
+                        return Center(
+                          child: CircularProgressIndicator(
+                            color: brand.accentColor,
+                          ),
+                        );
+                      }
+                      return ListView.builder(
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final message = messages[index];
+                          final mine =
+                              message['sender_id'] == repository.currentUserId;
+                          return Align(
+                            alignment: mine
+                                ? Alignment.centerRight
+                                : Alignment.centerLeft,
+                            child: Container(
+                              constraints: const BoxConstraints(maxWidth: 390),
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(11),
+                              decoration: BoxDecoration(
+                                color: mine
+                                    ? brand.accentColor
+                                    : const Color(0xFF292C31),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: _AdminCloudMessage(
+                                message: message,
+                                repository: repository,
+                                own: mine,
+                                onLongPress: () =>
+                                    selectedMessage.value = message,
+                              ),
+                            ),
+                          );
+                        },
                       );
-                      controller.clear();
                     },
-                    icon: const Icon(Icons.send_rounded),
                   ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Adjuntar foto o archivo',
+                      onPressed: () => _showAdminAttachmentMenu(
+                        context,
+                        brand.accentColor,
+                        repository,
+                        conversationId,
+                      ),
+                      icon: Icon(
+                        Icons.add_photo_alternate_outlined,
+                        color: brand.accentColor,
+                      ),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        decoration: const InputDecoration(
+                          hintText: 'Escribe una respuesta...',
+                          prefixIcon: Icon(Icons.chat_bubble_outline_rounded),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      tooltip: 'Enviar',
+                      onPressed: () async {
+                        final text = controller.text.trim();
+                        if (text.isEmpty) return;
+                        await repository.sendMessage(
+                          conversationId: conversationId,
+                          body: text,
+                        );
+                        controller.clear();
+                      },
+                      icon: const Icon(Icons.send_rounded),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cerrar'),
-          ),
-        ],
       ),
     );
     controller.dispose();
+    selectedMessage.dispose();
   }
 }
 
@@ -2956,11 +3061,13 @@ class _AdminCloudMessage extends StatelessWidget {
     required this.message,
     required this.repository,
     required this.own,
+    this.onLongPress,
   });
 
   final Map<String, dynamic> message;
   final ChatRepository repository;
   final bool own;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -2971,129 +3078,69 @@ class _AdminCloudMessage extends StatelessWidget {
       r'\.(jpe?g|png|webp|gif)$',
       caseSensitive: false,
     ).hasMatch(fileName);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (path.isNotEmpty)
-          FutureBuilder<String>(
-            future: repository.signedAttachmentUrl(path),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return const SizedBox(
-                  width: 220,
-                  height: 110,
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              final url = snapshot.data!;
-              return InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () => isImage
-                    ? ChatAttachmentActions.openImage(
-                        context,
-                        url: url,
-                        fileName: fileName,
-                      )
-                    : ChatAttachmentActions.download(
-                        context,
-                        url: url,
-                        fileName: fileName,
-                      ),
-                child: isImage
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          url,
-                          width: 220,
-                          height: 130,
-                          fit: BoxFit.cover,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: onLongPress,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (path.isNotEmpty)
+            FutureBuilder<String>(
+              future: repository.signedAttachmentUrl(path),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const SizedBox(
+                    width: 220,
+                    height: 110,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final url = snapshot.data!;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => isImage
+                      ? ChatAttachmentActions.openImage(
+                          context,
+                          url: url,
+                          fileName: fileName,
+                        )
+                      : ChatAttachmentActions.download(
+                          context,
+                          url: url,
+                          fileName: fileName,
                         ),
-                      )
-                    : Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.download_for_offline_outlined),
-                          const SizedBox(width: 8),
-                          Flexible(child: Text(fileName)),
-                        ],
-                      ),
-              );
-            },
-          ),
-        if (own && path.isNotEmpty)
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: () => _confirmDeleteMessage(context, path),
-              icon: const Icon(Icons.delete_outline_rounded, size: 17),
-              label: const Text('Eliminar archivo'),
-              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-            ),
-          ),
-        if (body.isNotEmpty) ...[
-          if (path.isNotEmpty) const SizedBox(height: 8),
-          GestureDetector(
-            onLongPress: () async {
-              await Clipboard.setData(ClipboardData(text: body));
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Mensaje copiado.')),
+                  child: isImage
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            url,
+                            width: 220,
+                            height: 130,
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.download_for_offline_outlined),
+                            const SizedBox(width: 8),
+                            Flexible(child: Text(fileName)),
+                          ],
+                        ),
                 );
-              }
-            },
-            child: Text(
+              },
+            ),
+          if (body.isNotEmpty) ...[
+            if (path.isNotEmpty) const SizedBox(height: 8),
+            Text(
               body,
               style: TextStyle(color: own ? Colors.black : Colors.white),
             ),
-          ),
-          if (own)
-            TextButton.icon(
-              onPressed: () => _confirmDeleteMessage(context, null),
-              icon: const Icon(Icons.delete_outline_rounded, size: 17),
-              label: const Text('Eliminar mensaje'),
-              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-            ),
-        ],
-      ],
-    );
-  }
-
-  Future<void> _confirmDeleteMessage(
-    BuildContext context,
-    String? attachmentPath,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('¿Eliminar mensaje?'),
-        content: const Text('Se eliminará para ambas personas del chat.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            icon: const Icon(Icons.delete_outline_rounded),
-            label: const Text('Eliminar'),
-          ),
+          ],
         ],
       ),
     );
-    if (confirmed != true) return;
-    try {
-      await repository.deleteOwnMessage(
-        messageId: message['id'].toString(),
-        attachmentPath: attachmentPath,
-      );
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No fue posible eliminar el mensaje.')),
-        );
-      }
-    }
   }
 }
 
