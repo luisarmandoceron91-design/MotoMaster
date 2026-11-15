@@ -1446,13 +1446,18 @@ class _SupportPageState extends State<_SupportPage> {
   }
 
   void _scrollMessagesToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    void scrollNow() {
       if (!_messageScrollController.hasClients) return;
-      _messageScrollController.animateTo(
+      _messageScrollController.jumpTo(
         _messageScrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
       );
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      scrollNow();
+      // Espera a que el teclado y el campo multilínea terminen de ajustar el
+      // diseño para que ningún mensaje quede detrás de la barra de envío.
+      Future<void>.delayed(const Duration(milliseconds: 120), scrollNow);
     });
   }
 
@@ -1514,6 +1519,18 @@ class _SupportPageState extends State<_SupportPage> {
           messageId: message['id'].toString(),
           attachmentPath: message['attachment_path']?.toString(),
         );
+        // Reacción inmediata: el servidor sigue siendo la fuente oficial,
+        // pero el cliente no debe esperar al siguiente evento de Realtime
+        // para dejar de ver el mensaje que acaba de eliminar.
+        if (mounted) {
+          setState(() {
+            _cloudMessages = _cloudMessages
+                .where(
+                  (row) => row['id']?.toString() != message['id']?.toString(),
+                )
+                .toList(growable: false);
+          });
+        }
       } catch (_) {
         _chatNotice('No fue posible eliminar el mensaje.');
       }
@@ -1810,6 +1827,7 @@ class _SupportPageState extends State<_SupportPage> {
                         Expanded(
                           child: TextField(
                             controller: _controller,
+                            onChanged: (_) => _scrollMessagesToBottom(),
                             minLines: 1,
                             maxLines: 10,
                             keyboardType: TextInputType.multiline,
@@ -2118,9 +2136,11 @@ class _SupportPageState extends State<_SupportPage> {
           mimeType: _mimeTypeForFile(file.name),
         );
         if (mounted) _chatNotice('Documento enviado al taller.');
-      } catch (_) {
+      } catch (error) {
         if (mounted) {
-          _chatNotice('No se pudo enviar el documento. Inténtalo nuevamente.');
+          _chatNotice(
+            'No se pudo enviar el documento: ${_attachmentErrorMessage(error)}',
+          );
         }
       }
       return;
@@ -2171,6 +2191,17 @@ class _SupportPageState extends State<_SupportPage> {
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       _ => image ? 'image/jpeg' : 'application/octet-stream',
     };
+  }
+
+  String _attachmentErrorMessage(Object error) {
+    final detail = error.toString().toLowerCase();
+    if (detail.contains('size') || detail.contains('large')) {
+      return 'el archivo es demasiado grande para el proveedor de almacenamiento.';
+    }
+    if (detail.contains('mime') || detail.contains('type')) {
+      return 'el tipo de archivo no está permitido.';
+    }
+    return 'revisa tu conexión e inténtalo de nuevo.';
   }
 }
 
@@ -4911,11 +4942,13 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
                       widget.workshop.id,
                       date,
                       time,
+                      mechanicName: selectedMechanic?.name,
                     );
                     if (!available) {
                       setSheet(() {
-                        slotError =
-                            'Este horario ya fue reservado. Elige otra hora.';
+                        slotError = selectedMechanic == null
+                            ? 'Este horario no está disponible. Elige otra hora.'
+                            : '${selectedMechanic!.name} ya tiene una cita en este horario. Elige otro mecánico u hora.';
                       });
                       return;
                     }

@@ -1725,6 +1725,31 @@ class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
                   final picker = Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (item.status == 'Solicitada') ...[
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            FilledButton.icon(
+                              onPressed: () async {
+                                await _store.decideAppointment(item, accept: true);
+                                await _load();
+                              },
+                              icon: const Icon(Icons.check_circle_outline),
+                              label: const Text('Aceptar cita'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                await _store.decideAppointment(item, accept: false);
+                                await _load();
+                              },
+                              icon: const Icon(Icons.cancel_outlined),
+                              label: const Text('Rechazar'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                       DropdownButton<String>(
                         value: clientServiceStages.contains(item.serviceStage)
                             ? item.serviceStage
@@ -2619,7 +2644,27 @@ class _WorkshopChatPanel extends StatelessWidget {
     if (!context.mounted) return;
     final controller = TextEditingController();
     final messageScrollController = ScrollController();
+    void scrollMessagesToBottom() {
+      void scrollNow() {
+        if (!messageScrollController.hasClients) return;
+        messageScrollController.jumpTo(
+          messageScrollController.position.maxScrollExtent,
+        );
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        scrollNow();
+        // Un segundo ajuste cubre los casos en que un mensaje, una imagen o
+        // una barra de texto multilínea terminan de cambiar su altura.
+        Future<void>.delayed(const Duration(milliseconds: 120), scrollNow);
+      });
+    }
+
     final selectedMessage = ValueNotifier<Map<String, dynamic>?>(null);
+    // Realtime confirma el cambio para todos los equipos. Esta lista evita
+    // que el administrador siga viendo unos segundos su propio mensaje luego
+    // de retirarlo, mientras llega la confirmación desde la nube.
+    final deletedMessageIds = ValueNotifier<Set<String>>(<String>{});
     final media = MediaQuery.sizeOf(context);
     final mobile = media.width < 600;
     await showDialog<void>(
@@ -2766,6 +2811,10 @@ class _WorkshopChatPanel extends StatelessWidget {
                               attachmentPath: selected['attachment_path']
                                   ?.toString(),
                             );
+                            deletedMessageIds.value = {
+                              ...deletedMessageIds.value,
+                              selected['id'].toString(),
+                            };
                           }
                           selectedMessage.value = null;
                         },
@@ -2782,7 +2831,13 @@ class _WorkshopChatPanel extends StatelessWidget {
                   child: StreamBuilder<List<Map<String, dynamic>>>(
                     stream: repository.watchMessages(conversationId),
                     builder: (context, snapshot) {
-                      final messages = snapshot.data ?? const [];
+                      final messages = (snapshot.data ?? const [])
+                          .where(
+                            (message) => !deletedMessageIds.value.contains(
+                              message['id']?.toString(),
+                            ),
+                          )
+                          .toList(growable: false);
                       if (!snapshot.hasData) {
                         return Center(
                           child: CircularProgressIndicator(
@@ -2790,12 +2845,7 @@ class _WorkshopChatPanel extends StatelessWidget {
                           ),
                         );
                       }
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (!messageScrollController.hasClients) return;
-                        messageScrollController.jumpTo(
-                          messageScrollController.position.maxScrollExtent,
-                        );
-                      });
+                      scrollMessagesToBottom();
                       return ListView.builder(
                         controller: messageScrollController,
                         padding: const EdgeInsets.only(bottom: 88),
@@ -2851,6 +2901,7 @@ class _WorkshopChatPanel extends StatelessWidget {
                     Expanded(
                       child: TextField(
                         controller: controller,
+                        onChanged: (_) => scrollMessagesToBottom(),
                         minLines: 1,
                         maxLines: 10,
                         keyboardType: TextInputType.multiline,
@@ -2911,6 +2962,7 @@ class _WorkshopChatPanel extends StatelessWidget {
     controller.dispose();
     messageScrollController.dispose();
     selectedMessage.dispose();
+    deletedMessageIds.dispose();
   }
 }
 
@@ -3088,10 +3140,15 @@ Future<void> _sendAdminPickedFile(
 }
 
 String _adminMimeType(String fileName, {required bool image}) {
-  if (!image) return 'application/octet-stream';
   final lower = fileName.toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.doc')) return 'application/msword';
+  if (lower.endsWith('.docx')) {
+    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  }
   if (lower.endsWith('.png')) return 'image/png';
   if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
   return 'image/jpeg';
 }
 
@@ -4131,17 +4188,26 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
   String _query = '';
   String _category = 'Todos';
   int _section = 0;
+  StreamSubscription<List<Map<String, dynamic>>>? _cloudSalesSubscription;
 
   @override
   void initState() {
     super.initState();
     CommerceStore.revision.addListener(_load);
+    if (ApiClient.cloudEnabled) {
+      _cloudSalesSubscription = ApiClient().client
+          .from('orders')
+          .stream(primaryKey: ['id'])
+          .eq('workshop_id', widget.workshopId)
+          .listen((_) => _load());
+    }
     _load();
   }
 
   @override
   void dispose() {
     CommerceStore.revision.removeListener(_load);
+    _cloudSalesSubscription?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
@@ -4848,6 +4914,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
     final dayStart = DateTime(now.year, now.month, now.day);
     final weekStart = dayStart.subtract(Duration(days: dayStart.weekday - 1));
     final monthStart = DateTime(now.year, now.month);
+    final yearStart = DateTime(now.year);
     int localSince(DateTime start) => _sales
         .where((sale) => !sale.createdAt.isBefore(start))
         .fold(0, (total, sale) => total + sale.totalCents);
@@ -4858,6 +4925,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
     final today = totalSince(dayStart);
     final week = totalSince(weekStart);
     final month = totalSince(monthStart);
+    final year = totalSince(yearStart);
     final completedOnline = _orders.where((order) => order.paid).toList();
     return Container(
       width: double.infinity,
@@ -4908,6 +4976,11 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                 icon: Icons.calendar_month_outlined,
                 label: 'Mes ${commerceMoney(month)}',
                 color: const Color(0xFF20C77A),
+              ),
+              _CommerceSummaryChip(
+                icon: Icons.insights_outlined,
+                label: 'Año ${commerceMoney(year)}',
+                color: const Color(0xFFBB86FC),
               ),
               _CommerceSummaryChip(
                 icon: Icons.storefront_outlined,

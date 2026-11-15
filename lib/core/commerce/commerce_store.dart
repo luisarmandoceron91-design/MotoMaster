@@ -316,6 +316,26 @@ class CommerceStore {
     String? workshopId,
     String? clientId,
   }) async {
+    if (ApiClient.cloudEnabled && ApiClient().client.auth.currentUser != null) {
+      try {
+        var query = ApiClient().client.from('orders').select(
+          '*, order_items(product_id, product_name, quantity, unit_price), '
+          'receipts(receipt_number, dian_invoice_url, cufe), '
+          'payments(provider_payment_id)',
+        );
+        if (workshopId != null) query = query.eq('workshop_id', workshopId);
+        if (clientId != null) query = query.eq('client_id', clientId);
+        final rows = await query.order('created_at', ascending: false);
+        final cloud = (rows as List)
+            .map((row) => _cloudOrder(Map<String, dynamic>.from(row)))
+            .toList();
+        await _saveOrders(cloud);
+        return cloud;
+      } catch (_) {
+        // Una caída de red puede mostrar la última copia, nunca sustituir la
+        // fuente oficial cuando la nube responde.
+      }
+    }
     final prefs = await SharedPreferences.getInstance();
     var items = _decodeList(
       prefs.getString(_ordersKey),
@@ -341,6 +361,52 @@ class CommerceStore {
   }) async {
     if (!product.available || quantity < 1 || quantity > product.stock) {
       throw StateError('No hay existencias suficientes.');
+    }
+    if (ApiClient.cloudEnabled &&
+        ApiClient().client.auth.currentUser != null &&
+        _isUuid(product.id)) {
+      final response = await ApiClient().client.rpc(
+        'create_online_order',
+        params: {
+          'p_product_id': product.id,
+          'p_quantity': quantity,
+          'p_payment_method': paymentMethod,
+        },
+      );
+      final cloud = Map<String, dynamic>.from(response as Map);
+      final now = DateTime.tryParse(cloud['created_at']?.toString() ?? '') ??
+          DateTime.now();
+      final order = CommerceOrder(
+        id: cloud['id'].toString(),
+        workshopId: product.workshopId,
+        workshopName: workshopName,
+        clientId: clientId,
+        clientName: clientName,
+        productId: product.id,
+        productName: product.name,
+        quantity: quantity,
+        unitPriceCents: product.priceCents,
+        platformFeeCents:
+            ((cloud['platform_fee'] as num?)?.toDouble() ?? 0).round() * 100,
+        paymentMethod: cloud['payment_method']?.toString() ?? paymentMethod,
+        status: CommerceOrderStatus.paid,
+        pickupCode: '',
+        receiptNumber: cloud['receipt_number']?.toString() ?? '',
+        createdAt: now,
+        updatedAt: now,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      final orders = await listOrders()..removeWhere((item) => item.id == order.id);
+      orders.add(order);
+      await _saveOrders(orders);
+      final all = _decodeList(prefs.getString(_productsKey))
+          .map(CommerceProduct.fromJson)
+          .toList();
+      final index = all.indexWhere((item) => item.id == product.id);
+      if (index >= 0) all[index] = product.copyWith(stock: product.stock - quantity);
+      await _saveProducts(all);
+      revision.value++;
+      return order;
     }
     final now = DateTime.now();
     final random = Random.secure();
@@ -376,6 +442,48 @@ class CommerceStore {
     );
     revision.value++;
     return order;
+  }
+
+  CommerceOrder _cloudOrder(Map<String, dynamic> row) {
+    final items = row['order_items'] as List? ?? const [];
+    final firstItem = items.isEmpty
+        ? const <String, dynamic>{}
+        : Map<String, dynamic>.from(items.first as Map);
+    final receipts = row['receipts'] as List? ?? const [];
+    final receipt = receipts.isEmpty
+        ? const <String, dynamic>{}
+        : Map<String, dynamic>.from(receipts.first as Map);
+    final payments = row['payments'] as List? ?? const [];
+    final payment = payments.isEmpty
+        ? const <String, dynamic>{}
+        : Map<String, dynamic>.from(payments.first as Map);
+    final status = row['status']?.toString() ?? 'awaiting_payment';
+    return CommerceOrder(
+      id: row['id'].toString(),
+      workshopId: row['workshop_id'].toString(),
+      workshopName: 'Taller',
+      clientId: row['client_id'].toString(),
+      clientName: 'Cliente',
+      productId: firstItem['product_id']?.toString() ?? '',
+      productName: firstItem['product_name']?.toString() ?? '',
+      quantity: (firstItem['quantity'] as num?)?.toInt() ?? 1,
+      unitPriceCents:
+          ((firstItem['unit_price'] as num?)?.toDouble() ?? 0).round() * 100,
+      platformFeeCents:
+          ((row['platform_fee'] as num?)?.toDouble() ?? 0).round() * 100,
+      paymentMethod: row['payment_method']?.toString() ?? 'Pago virtual',
+      status: CommerceOrderStatus.values.firstWhere(
+        (value) => value.name == status,
+        orElse: () => CommerceOrderStatus.awaitingPayment,
+      ),
+      pickupCode: '',
+      receiptNumber: receipt['receipt_number']?.toString() ?? '',
+      createdAt: DateTime.tryParse(row['created_at']?.toString() ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(row['updated_at']?.toString() ?? ''),
+      mercadoPagoId: payment['provider_payment_id']?.toString(),
+      dianInvoiceUrl: receipt['dian_invoice_url']?.toString(),
+      cufe: receipt['cufe']?.toString(),
+    );
   }
 
   Future<void> updateOrderStatus(

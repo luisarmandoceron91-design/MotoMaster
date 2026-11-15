@@ -236,7 +236,6 @@ class ClientServiceStore {
             .from('motorcycles')
             .select()
             .eq('owner_id', clientId)
-            .eq('workshop_id', workshopId)
             .order('created_at');
         final items = (rows as List)
             .map((row) => _motorcycleFromCloud(Map<String, dynamic>.from(row)))
@@ -276,7 +275,9 @@ class ClientServiceStore {
       try {
         final payload = <String, dynamic>{
           'owner_id': clientId,
-          'workshop_id': workshopId,
+          // La moto pertenece al cliente, no a un taller concreto. Así queda
+          // disponible al pedir cita en cualquier taller actual o futuro.
+          'workshop_id': null,
           'brand': motorcycle.brand.trim(),
           'model': motorcycle.model.trim(),
           'plate': motorcycle.plate.trim(),
@@ -444,7 +445,10 @@ class ClientServiceStore {
           item.id != saved.id &&
           item.workshopId == workshopId &&
           _sameDay(item.date, saved.date) &&
-          item.time == saved.time,
+          item.time == saved.time &&
+          saved.requestedMechanicName.trim().isNotEmpty &&
+          (item.mechanicName == saved.requestedMechanicName ||
+              item.requestedMechanicName == saved.requestedMechanicName),
     );
     if (occupied) throw const AppointmentSlotUnavailableException();
 
@@ -464,12 +468,13 @@ class ClientServiceStore {
     String workshopId,
     DateTime date,
     String time, {
+    String? mechanicName,
     String? excludingAppointmentId,
   }) async {
     final cloud = _cloudClient(workshopId, null);
     if (cloud != null) {
       try {
-        final rows = await cloud
+        var query = cloud
             .from('appointments')
             .select('id')
             .eq('workshop_id', workshopId)
@@ -477,8 +482,14 @@ class ClientServiceStore {
               'scheduled_at',
               _scheduledAtParts(date, time).toUtc().toIso8601String(),
             )
-            .neq('status', 'cancelled')
-            .limit(1);
+            .inFilter('status', ['requested', 'confirmed', 'in_progress']);
+        final requested = mechanicName?.trim() ?? '';
+        if (requested.isNotEmpty) {
+          query = query.or(
+            'mechanic_name.eq.${Uri.encodeComponent(requested)},requested_mechanic_name.eq.${Uri.encodeComponent(requested)}',
+          );
+        }
+        final rows = await query.limit(1);
         if ((rows as List).isNotEmpty) return false;
       } catch (_) {
         // The final insert remains the authoritative atomic conflict check.
@@ -492,7 +503,11 @@ class ClientServiceStore {
           item.id != excludingAppointmentId &&
           item.workshopId == workshopId &&
           _sameDay(item.date, date) &&
-          item.time == time,
+          item.time == time &&
+          (mechanicName == null ||
+              mechanicName.trim().isEmpty ||
+              item.mechanicName == mechanicName ||
+              item.requestedMechanicName == mechanicName),
     );
   }
 
@@ -641,6 +656,50 @@ class ClientServiceStore {
     revision.value++;
   }
 
+  /// El administrador confirma o rechaza la solicitud. La actualización se
+  /// realiza en Supabase y el trigger de notificaciones avisa al cliente.
+  Future<void> decideAppointment(
+    ClientAppointment appointment, {
+    required bool accept,
+  }) async {
+    if (appointment.status != 'Solicitada') return;
+    final stage = accept ? 'Cita solicitada' : 'Cita rechazada';
+    final status = accept ? 'confirmed' : 'cancelled';
+    final updated = appointment.copyWith(
+      status: accept ? 'Confirmada' : 'Cancelada',
+      serviceStage: stage,
+      updatedAt: DateTime.now(),
+    );
+    final cloud = _cloudClient(appointment.workshopId, null);
+    if (cloud != null && _isUuid(appointment.id)) {
+      try {
+        await cloud
+            .from('appointments')
+            .update({'status': status, 'service_stage': stage})
+            .eq('id', appointment.id);
+      } catch (_) {
+        throw const AppointmentPersistenceException();
+      }
+    }
+    final preferences = await SharedPreferences.getInstance();
+    final global = await _listGlobalAppointments(preferences);
+    final globalIndex = global.indexWhere((item) => item.id == appointment.id);
+    if (globalIndex >= 0) global[globalIndex] = updated;
+    await _saveGlobalAppointments(preferences, global);
+    final scoped = [
+      ...await listAppointments(appointment.workshopId, appointment.clientId),
+    ];
+    final scopedIndex = scoped.indexWhere((item) => item.id == appointment.id);
+    if (scopedIndex >= 0) scoped[scopedIndex] = updated;
+    await _saveAppointments(
+      preferences,
+      appointment.workshopId,
+      appointment.clientId,
+      scoped,
+    );
+    revision.value++;
+  }
+
   Future<void> purgeWorkshop(String workshopId) async {
     final preferences = await SharedPreferences.getInstance();
     final safeId = workshopId.toLowerCase().replaceAll(
@@ -750,6 +809,8 @@ class ClientServiceStore {
       clientId: row['client_id']?.toString() ?? '',
       serviceStage: row['service_stage']?.toString() ?? 'Cita solicitada',
       mechanicName: row['mechanic_name']?.toString() ?? '',
+      requestedMechanicName:
+          row['requested_mechanic_name']?.toString() ?? '',
       updatedAt: DateTime.tryParse(row['updated_at']?.toString() ?? ''),
     );
   }

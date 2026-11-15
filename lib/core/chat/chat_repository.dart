@@ -308,7 +308,13 @@ class ChatRepository {
     final path = deleted.first['attachment_path']?.toString().trim();
     final safePath = path?.isNotEmpty == true ? path : attachmentPath?.trim();
     if (safePath != null && safePath.isNotEmpty) {
-      await _client.storage.from('chat-attachments').remove([safePath]);
+      // El mensaje ya fue retirado de la conversación. Si el archivo ya no
+      // existe o Storage tarda en responder, no debemos informar un fallo ni
+      // dejar el mensaje visible en pantalla. El borrado del archivo se
+      // intenta como limpieza secundaria.
+      try {
+        await _client.storage.from('chat-attachments').remove([safePath]);
+      } catch (_) {}
     }
   }
 
