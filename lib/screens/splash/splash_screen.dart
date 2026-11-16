@@ -9,6 +9,7 @@ import '../../core/branding/workshop_brand.dart';
 import '../../core/tenant/tenant_context.dart';
 import '../../core/tenant/tenant_model.dart';
 import '../../core/client/client_profile_repository.dart';
+import '../../core/networking/api_client.dart';
 import '../../core/workshops/workshop_repository.dart';
 import '../dashboard/admin_dashboard_screen.dart';
 import '../owner/owner_dashboard_screen.dart';
@@ -63,7 +64,9 @@ class _SplashScreenState extends State<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 2700));
     if (!mounted) return;
 
-    final pendingGoogleFromUrl = Uri.base.queryParameters['google_intent'];
+    final pendingGoogleFromUrl =
+        ApiClient.pendingGoogleIntent ??
+        Uri.base.queryParameters['google_intent'];
     final pendingGoogle = switch (pendingGoogleFromUrl) {
       'administrator' => GoogleAccountIntent.administrator,
       'client' => GoogleAccountIntent.client,
@@ -169,7 +172,8 @@ class _SplashScreenState extends State<SplashScreen>
               builder: (_) => AdminDashboardScreen(
                 brandController: widget.brandController,
                 tenantContext: widget.tenantContext,
-                userName: user?.userMetadata?['full_name']?.toString() ??
+                userName:
+                    user?.userMetadata?['full_name']?.toString() ??
                     user?.email ??
                     'Administrador',
               ),

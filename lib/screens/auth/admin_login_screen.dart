@@ -617,8 +617,11 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
   Future<void> _resumeGoogle() async {
     final intentStore = AdminOAuthIntentStore();
-    if (await intentStore.pendingIntent() !=
-        GoogleAccountIntent.administrator) {
+    final returnedAsAdministrator = ApiClient.pendingGoogleIntent ==
+        GoogleAccountIntent.administrator.name;
+    if (!returnedAsAdministrator &&
+        await intentStore.pendingIntent() !=
+            GoogleAccountIntent.administrator) {
       return;
     }
     await intentStore.clear();

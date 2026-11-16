@@ -383,7 +383,12 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
 
   Future<void> _resumeGoogle() async {
     final intentStore = AdminOAuthIntentStore();
-    if (await intentStore.pendingIntent() != GoogleAccountIntent.client) return;
+    final returnedAsClient = ApiClient.pendingGoogleIntent ==
+        GoogleAccountIntent.client.name;
+    if (!returnedAsClient &&
+        await intentStore.pendingIntent() != GoogleAccountIntent.client) {
+      return;
+    }
     await intentStore.clear();
     final user = _auth.currentUser;
     if (user == null || !mounted) return;

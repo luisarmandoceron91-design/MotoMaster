@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ApiClient {
@@ -17,6 +18,11 @@ class ApiClient {
   static String get supabaseUrl => _supabaseUrl;
   static String get supabasePublishableKey => _supabaseAnonKey;
 
+  /// Se conserva durante el arranque web para terminar el flujo correcto
+  /// (cliente o administrador) después de regresar desde Google.
+  static String? _pendingGoogleIntent;
+  static String? get pendingGoogleIntent => _pendingGoogleIntent;
+
   bool _initialized = false;
 
   bool get isInitialized => _initialized;
@@ -30,11 +36,34 @@ class ApiClient {
 
   Future<void> init() async {
     if (_initialized) return;
+    final callbackUri = Uri.base;
+    _pendingGoogleIntent = callbackUri.queryParameters['google_intent'];
     await Supabase.initialize(
       url: _supabaseUrl,
       publishableKey: _supabaseAnonKey,
+      // El SDK normalmente consume el callback internamente y limpia la URL
+      // antes de que la aplicación conozca si el usuario eligió Cliente o
+      // Administrador. Lo procesamos justo después para conservar ese dato.
+      authOptions: const FlutterAuthClientOptions(
+        detectSessionInUri: false,
+      ),
     );
+    if (kIsWeb && _isAuthCallback(callbackUri)) {
+      try {
+        await Supabase.instance.client.auth.getSessionFromUrl(callbackUri);
+      } catch (error) {
+        debugPrint('No fue posible completar el retorno OAuth: $error');
+      }
+    }
     _initialized = true;
+  }
+
+  bool _isAuthCallback(Uri uri) {
+    final fragment = Uri.splitQueryString(uri.fragment);
+    return uri.queryParameters.containsKey('code') ||
+        uri.queryParameters.containsKey('error') ||
+        fragment.containsKey('access_token') ||
+        fragment.containsKey('error');
   }
 
   SupabaseClient get client => Supabase.instance.client;
