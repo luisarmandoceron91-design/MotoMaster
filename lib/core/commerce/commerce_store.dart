@@ -318,11 +318,13 @@ class CommerceStore {
   }) async {
     if (ApiClient.cloudEnabled && ApiClient().client.auth.currentUser != null) {
       try {
-        var query = ApiClient().client.from('orders').select(
-          '*, order_items(product_id, product_name, quantity, unit_price), '
-          'receipts(receipt_number, dian_invoice_url, cufe), '
-          'payments(provider_payment_id)',
-        );
+        var query = ApiClient().client
+            .from('orders')
+            .select(
+              '*, order_items(product_id, product_name, quantity, unit_price), '
+              'receipts(receipt_number, dian_invoice_url, cufe), '
+              'payments(provider_payment_id)',
+            );
         if (workshopId != null) query = query.eq('workshop_id', workshopId);
         if (clientId != null) query = query.eq('client_id', clientId);
         final rows = await query.order('created_at', ascending: false);
@@ -374,7 +376,8 @@ class CommerceStore {
         },
       );
       final cloud = Map<String, dynamic>.from(response as Map);
-      final now = DateTime.tryParse(cloud['created_at']?.toString() ?? '') ??
+      final now =
+          DateTime.tryParse(cloud['created_at']?.toString() ?? '') ??
           DateTime.now();
       final order = CommerceOrder(
         id: cloud['id'].toString(),
@@ -396,14 +399,17 @@ class CommerceStore {
         updatedAt: now,
       );
       final prefs = await SharedPreferences.getInstance();
-      final orders = await listOrders()..removeWhere((item) => item.id == order.id);
+      final orders = await listOrders()
+        ..removeWhere((item) => item.id == order.id);
       orders.add(order);
       await _saveOrders(orders);
-      final all = _decodeList(prefs.getString(_productsKey))
-          .map(CommerceProduct.fromJson)
-          .toList();
+      final all = _decodeList(
+        prefs.getString(_productsKey),
+      ).map(CommerceProduct.fromJson).toList();
       final index = all.indexWhere((item) => item.id == product.id);
-      if (index >= 0) all[index] = product.copyWith(stock: product.stock - quantity);
+      if (index >= 0) {
+        all[index] = product.copyWith(stock: product.stock - quantity);
+      }
       await _saveProducts(all);
       revision.value++;
       return order;
@@ -478,7 +484,9 @@ class CommerceStore {
       ),
       pickupCode: '',
       receiptNumber: receipt['receipt_number']?.toString() ?? '',
-      createdAt: DateTime.tryParse(row['created_at']?.toString() ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(row['created_at']?.toString() ?? '') ??
+          DateTime.now(),
       updatedAt: DateTime.tryParse(row['updated_at']?.toString() ?? ''),
       mercadoPagoId: payment['provider_payment_id']?.toString(),
       dianInvoiceUrl: receipt['dian_invoice_url']?.toString(),
@@ -536,6 +544,40 @@ class CommerceStore {
   Future<List<PointOfSaleTicket>> listPointOfSaleTickets(
     String workshopId,
   ) async {
+    if (ApiClient.cloudEnabled && ApiClient().client.auth.currentUser != null) {
+      try {
+        final rows = await ApiClient().client
+            .from('orders')
+            .select(
+              '*, order_items(product_id, product_name, quantity, unit_price), '
+              'receipts(receipt_number)',
+            )
+            .eq('workshop_id', workshopId)
+            .eq('sale_channel', 'local')
+            .order('created_at', ascending: false);
+        final tickets = (rows as List)
+            .map(
+              (row) => _cloudPointOfSaleTicket(Map<String, dynamic>.from(row)),
+            )
+            .toList();
+        final prefs = await SharedPreferences.getInstance();
+        final all =
+            _decodeList(prefs.getString(_pointOfSaleKey))
+                .map(PointOfSaleTicket.fromJson)
+                .where((item) => item.workshopId != workshopId)
+                .toList()
+              ..addAll(tickets);
+        await prefs.setString(
+          _pointOfSaleKey,
+          jsonEncode(all.map((item) => item.toJson()).toList()),
+        );
+        return tickets;
+      } catch (_) {
+        // Con nube activa nunca presentamos una caja local antigua como dato
+        // contable oficial: el siguiente botón Actualizar reintentará la consulta.
+        return const [];
+      }
+    }
     final prefs = await SharedPreferences.getInstance();
     final items = _decodeList(prefs.getString(_pointOfSaleKey))
         .map(PointOfSaleTicket.fromJson)
@@ -604,6 +646,57 @@ class CommerceStore {
         ticket.discountCents > ticket.subtotalCents) {
       throw StateError('El descuento no puede superar el subtotal.');
     }
+
+    if (ApiClient.cloudEnabled && ApiClient().client.auth.currentUser != null) {
+      final response = await ApiClient().client.rpc(
+        'create_local_sale',
+        params: {
+          'p_workshop_id': workshopId,
+          'p_items': lines
+              .map(
+                (line) => {
+                  'product_id': line.productId,
+                  'quantity': line.quantity,
+                },
+              )
+              .toList(),
+          'p_payment_method': paymentMethod,
+          'p_customer_name': ticket.customerName,
+          'p_customer_document': customerDocument.trim(),
+          'p_customer_phone': customerPhone.trim(),
+          'p_discount': ticket.discountCents / 100,
+        },
+      );
+      final cloud = Map<String, dynamic>.from(response as Map);
+      final saved = PointOfSaleTicket(
+        id: cloud['id']?.toString() ?? ticket.id,
+        workshopId: workshopId,
+        workshopName: workshopName,
+        invoiceNumber:
+            cloud['receipt_number']?.toString() ?? ticket.invoiceNumber,
+        customerName: ticket.customerName,
+        customerDocument: ticket.customerDocument,
+        customerPhone: ticket.customerPhone,
+        paymentMethod: cloud['payment_method']?.toString() ?? paymentMethod,
+        lines: lines,
+        discountCents: ticket.discountCents,
+        createdAt:
+            DateTime.tryParse(cloud['created_at']?.toString() ?? '') ?? now,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      final sales =
+          _decodeList(prefs.getString(_pointOfSaleKey))
+              .map(PointOfSaleTicket.fromJson)
+              .where((item) => item.id != saved.id)
+              .toList()
+            ..add(saved);
+      await prefs.setString(
+        _pointOfSaleKey,
+        jsonEncode(sales.map((item) => item.toJson()).toList()),
+      );
+      revision.value++;
+      return saved;
+    }
     final prefs = await SharedPreferences.getInstance();
     final allProducts = _decodeList(
       prefs.getString(_productsKey),
@@ -663,6 +756,44 @@ class CommerceStore {
     await prefs.setString(
       _movementsKey,
       jsonEncode(items.map((item) => item.toJson()).toList()),
+    );
+  }
+
+  PointOfSaleTicket _cloudPointOfSaleTicket(Map<String, dynamic> row) {
+    final items = (row['order_items'] as List? ?? const [])
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .map(
+          (item) => PointOfSaleLine(
+            productId: item['product_id']?.toString() ?? '',
+            productName: item['product_name']?.toString() ?? '',
+            brand: '',
+            barcode: '',
+            quantity: (item['quantity'] as num?)?.toInt() ?? 0,
+            unitPriceCents:
+                ((item['unit_price'] as num?)?.toDouble() ?? 0).round() * 100,
+            costPriceCents: 0,
+          ),
+        )
+        .toList();
+    final receipts = row['receipts'] as List? ?? const [];
+    final receipt = receipts.isEmpty
+        ? const <String, dynamic>{}
+        : Map<String, dynamic>.from(receipts.first as Map);
+    return PointOfSaleTicket(
+      id: row['id']?.toString() ?? '',
+      workshopId: row['workshop_id']?.toString() ?? '',
+      workshopName: 'Taller',
+      invoiceNumber: receipt['receipt_number']?.toString() ?? '',
+      customerName:
+          row['counter_customer_name']?.toString() ?? 'Consumidor final',
+      customerDocument: row['counter_customer_document']?.toString() ?? '',
+      customerPhone: row['counter_customer_phone']?.toString() ?? '',
+      paymentMethod: row['payment_method']?.toString() ?? 'Efectivo',
+      lines: items,
+      discountCents: ((row['discount'] as num?)?.toDouble() ?? 0).round() * 100,
+      createdAt:
+          DateTime.tryParse(row['created_at']?.toString() ?? '') ??
+          DateTime.now(),
     );
   }
 
