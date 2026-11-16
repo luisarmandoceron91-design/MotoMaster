@@ -82,14 +82,24 @@ class AuthService {
     );
   }
 
-  Future<bool> signInWithGoogle() async {
+  Future<bool> signInWithGoogle({String? intent}) async {
     if (!await isGoogleProviderEnabled()) {
       throw const AuthException(
         'Google todavía no está habilitado en Supabase. Activa el proveedor Google para continuar.',
       );
     }
+    // Además de conservar la intención en el almacenamiento local, se añade al
+    // retorno web. Algunos navegadores móviles limpian o restauran tarde ese
+    // almacenamiento durante la redirección OAuth; el parámetro permite que
+    // Splash dirija la cuenta al registro/panel correcto al volver de Google.
     final redirectTo = kIsWeb
-        ? Uri.base.origin
+        ? Uri.parse(Uri.base.origin)
+              .replace(
+                queryParameters: intent == null
+                    ? null
+                    : {'google_intent': intent},
+              )
+              .toString()
         : 'io.supabase.motomaster://login-callback/';
     return _client.auth.signInWithOAuth(
       OAuthProvider.google,

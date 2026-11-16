@@ -63,7 +63,12 @@ class _SplashScreenState extends State<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 2700));
     if (!mounted) return;
 
-    final pendingGoogle = await AdminOAuthIntentStore().pendingIntent();
+    final pendingGoogleFromUrl = Uri.base.queryParameters['google_intent'];
+    final pendingGoogle = switch (pendingGoogleFromUrl) {
+      'administrator' => GoogleAccountIntent.administrator,
+      'client' => GoogleAccountIntent.client,
+      _ => await AdminOAuthIntentStore().pendingIntent(),
+    };
     if (!mounted) return;
     final isPasswordRecovery =
         Uri.base.queryParameters['recovery'] == 'password';

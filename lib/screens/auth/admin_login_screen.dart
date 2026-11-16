@@ -591,7 +591,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     final intentStore = AdminOAuthIntentStore();
     try {
       await intentStore.markPending(GoogleAccountIntent.administrator);
-      final started = await AuthService().signInWithGoogle();
+      final started = await AuthService().signInWithGoogle(
+        intent: GoogleAccountIntent.administrator.name,
+      );
       if (!started) {
         await intentStore.clear();
         if (mounted) {

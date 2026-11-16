@@ -359,7 +359,9 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
     final intentStore = AdminOAuthIntentStore();
     try {
       await intentStore.markPending(GoogleAccountIntent.client);
-      final started = await _auth.signInWithGoogle();
+      final started = await _auth.signInWithGoogle(
+        intent: GoogleAccountIntent.client.name,
+      );
       if (!started) {
         await intentStore.clear();
         if (mounted) {
