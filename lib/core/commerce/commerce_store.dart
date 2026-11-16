@@ -334,8 +334,9 @@ class CommerceStore {
         await _saveOrders(cloud);
         return cloud;
       } catch (_) {
-        // Una caída de red puede mostrar la última copia, nunca sustituir la
-        // fuente oficial cuando la nube responde.
+        // La nube es la fuente oficial: no mostramos pedidos locales de otro
+        // momento si no logramos leer la base compartida.
+        return const [];
       }
     }
     final prefs = await SharedPreferences.getInstance();

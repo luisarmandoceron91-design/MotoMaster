@@ -243,7 +243,9 @@ class ClientServiceStore {
         await _saveMotorcycles(preferences, workshopId, clientId, items);
         return items;
       } catch (_) {
-        // La copia local se usa solo como respaldo cuando la red no responde.
+        // Con nube activa no se debe presentar una copia antigua de otro
+        // dispositivo como si fuese información vigente.
+        return const [];
       }
     }
     final encoded = preferences.getString(
@@ -355,7 +357,8 @@ class ClientServiceStore {
         await _mergeGlobalAppointments(preferences, items);
         return items;
       } catch (_) {
-        // Continúa con la última copia local si la nube no está disponible.
+        // La nube es la única fuente oficial cuando está configurada.
+        return const [];
       }
     }
     final encoded = preferences.getString(
@@ -595,7 +598,8 @@ class ClientServiceStore {
         await _mergeGlobalAppointments(preferences, items);
         return items;
       } catch (_) {
-        // Se muestra el último estado descargado si falla la conexión.
+        // Evita que el taller vea citas antiguas de un dispositivo local.
+        return const [];
       }
     }
     final items = await _listGlobalAppointments(preferences);
@@ -809,8 +813,7 @@ class ClientServiceStore {
       clientId: row['client_id']?.toString() ?? '',
       serviceStage: row['service_stage']?.toString() ?? 'Cita solicitada',
       mechanicName: row['mechanic_name']?.toString() ?? '',
-      requestedMechanicName:
-          row['requested_mechanic_name']?.toString() ?? '',
+      requestedMechanicName: row['requested_mechanic_name']?.toString() ?? '',
       updatedAt: DateTime.tryParse(row['updated_at']?.toString() ?? ''),
     );
   }
