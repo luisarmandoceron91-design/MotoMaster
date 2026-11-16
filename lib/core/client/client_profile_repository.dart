@@ -69,6 +69,7 @@ class ClientProfileRepository {
           'department': department.trim(),
           'city': city.trim(),
           'avatar_path': ?avatarPath,
+          'registration_status': 'registered',
         }, onConflict: 'user_id')
         .select()
         .single();

@@ -17,6 +17,39 @@ class AuthService {
   bool get isAuthenticated => currentUser != null;
   Stream<AuthState> get authChanges => _client.auth.onAuthStateChange;
 
+  /// Clasifica la cuenta que acaba de volver desde Google usando los registros
+  /// reales de la plataforma. No confiamos solo en el correo ni en los datos
+  /// que Google entrega: un administrador debe tener rol de taller/propietario
+  /// y un cliente debe tener su perfil persistido en `profiles`.
+  Future<GoogleRegistrationState> googleRegistrationState() async {
+    final user = currentUser;
+    if (user == null) return GoogleRegistrationState.unregistered;
+    final role = await _client.rpc('resolve_admin_access');
+    switch (role) {
+      case 'platform_owner':
+      case 'workshop_owner':
+      case 'workshop_staff':
+      case 'workshop_suspended':
+      case 'workshop_expired':
+        return GoogleRegistrationState.administrator;
+    }
+    final profile = await _client
+        .from('profiles')
+        .select('user_id, registration_status')
+        .eq('user_id', user.id)
+        .maybeSingle();
+    if (profile != null && profile['registration_status'] == 'registered') {
+      return GoogleRegistrationState.client;
+    }
+
+    // Un administrador que está registrado pero aún no ha terminado de crear
+    // el taller conserva explícitamente su tipo de cuenta en la metadata.
+    final accountType = user.userMetadata?['account_type']?.toString();
+    if (accountType == 'admin') return GoogleRegistrationState.administrator;
+    if (accountType == 'client') return GoogleRegistrationState.client;
+    return GoogleRegistrationState.unregistered;
+  }
+
   Future<AuthResponse> signUp({
     required String email,
     required String password,
@@ -177,3 +210,5 @@ class AuthService {
 
   Future<void> signOut() => _client.auth.signOut();
 }
+
+enum GoogleRegistrationState { administrator, client, unregistered }

@@ -251,7 +251,9 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
     keyboardType: keyboardType,
     obscureText: obscureText,
     // No reutilizar claves guardadas automáticamente en pantallas de acceso.
-    autofillHints: obscureText ? const <String>[] : const [AutofillHints.username],
+    autofillHints: obscureText
+        ? const <String>[]
+        : const [AutofillHints.username],
     validator: validator,
     decoration: InputDecoration(
       labelText: label,
@@ -383,9 +385,9 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
     await intentStore.clear();
     final user = _auth.currentUser;
     if (user == null || !mounted) return;
-    final metadata = user.userMetadata ?? const <String, dynamic>{};
-    final accountType = metadata['account_type']?.toString();
-    if (accountType == 'admin') {
+    final registrationState = await _auth.googleRegistrationState();
+    if (!mounted) return;
+    if (registrationState == GoogleRegistrationState.administrator) {
       await _auth.signOut();
       if (mounted) {
         setState(
@@ -394,16 +396,17 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
       }
       return;
     }
-    if (accountType == 'client') {
-      final profile = ClientProfile(
-        userId: user.id,
-        fullName: (metadata['full_name'] ?? metadata['name'] ?? 'Cliente')
-            .toString(),
-        email: user.email ?? '',
-        phone: metadata['phone']?.toString() ?? '',
-        department: metadata['department']?.toString() ?? '',
-        city: metadata['city']?.toString() ?? '',
-      );
+    if (registrationState == GoogleRegistrationState.client) {
+      final profile = await ClientProfileRepository().getCurrentProfile();
+      if (profile == null) {
+        await _auth.signOut();
+        if (mounted) {
+          setState(
+            () => _error = 'No fue posible cargar tu perfil de cliente.',
+          );
+        }
+        return;
+      }
       _openWorkshopSelection(profile);
       unawaited(_refreshProfileCache());
       return;

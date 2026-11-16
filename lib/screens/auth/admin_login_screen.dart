@@ -626,6 +626,31 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       _loginError = null;
     });
     try {
+      final registrationState = await AuthService().googleRegistrationState();
+      if (registrationState == GoogleRegistrationState.client) {
+        await AuthService().signOut();
+        if (mounted) {
+          setState(
+            () => _loginError =
+                'Esta cuenta de Google pertenece a un cliente. Ingresa desde la opción Cliente.',
+          );
+        }
+        return;
+      }
+      if (registrationState == GoogleRegistrationState.unregistered) {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute<void>(
+            builder: (_) => AdminActivationScreen(
+              tenantContext: widget.tenantContext,
+              brandController: widget.brandController,
+              authController: widget.authController,
+              existingGoogleAccount: true,
+            ),
+          ),
+        );
+        return;
+      }
       final accessRole = await AdminAccessService().resolveRole();
       if (accessRole == AdminAccessRole.platformOwner) {
         await widget.authController.restoreOwnerProfileFromCloud();
@@ -657,17 +682,12 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         await _enterAdminPanel();
         return;
       }
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(
-          builder: (_) => AdminActivationScreen(
-            tenantContext: widget.tenantContext,
-            brandController: widget.brandController,
-            authController: widget.authController,
-            existingGoogleAccount: true,
-          ),
-        ),
-      );
+      if (mounted) {
+        setState(
+          () => _loginError =
+              'No se encontró un taller activo para esta cuenta administrativa.',
+        );
+      }
     } catch (error) {
       if (mounted) {
         setState(
@@ -726,7 +746,9 @@ class _LoginField extends StatelessWidget {
     obscureText: obscureText,
     // Evita que el navegador inserte una clave recordada. La contraseña
     // siempre debe comenzar vacía y ser escrita por la persona que ingresa.
-    autofillHints: obscureText ? const <String>[] : const [AutofillHints.username],
+    autofillHints: obscureText
+        ? const <String>[]
+        : const [AutofillHints.username],
     keyboardType: keyboardType,
     textInputAction: textInputAction,
     autocorrect: false,
