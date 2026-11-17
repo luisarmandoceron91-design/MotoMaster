@@ -3469,6 +3469,8 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
   var _tab = 0;
   CommerceProduct? _productQuestion;
   var _loading = true;
+  var _refreshing = false;
+  var _refreshToken = 0;
 
   String get _clientId =>
       _profile.userId?.isNotEmpty == true ? _profile.userId! : _profile.email;
@@ -3519,6 +3521,33 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       _appointments = appointments;
       _loading = false;
     });
+  }
+
+  /// Fuerza una consulta nueva de todos los datos visibles, incluidos el
+  /// catálogo y el chat que se mantienen vivos dentro del [IndexedStack].
+  Future<void> _refreshFromCloud() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      await _reload();
+      // Los paneles de repuestos, pedidos y soporte tienen sus propias
+      // consultas. Al cambiar su llave se crean de nuevo y consultan la nube.
+      CommerceStore.revision.value++;
+      if (!mounted) return;
+      setState(() => _refreshToken++);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Datos actualizados desde la nube.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No fue posible actualizar. Revisa tu conexión.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
   }
 
   @override
@@ -3581,8 +3610,13 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
         actions: [
           IconButton(
             tooltip: 'Actualizar datos desde la nube',
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _refreshing ? null : _refreshFromCloud,
+            icon: _refreshing
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh_rounded),
           ),
           AppNotificationsButton(
             color: widget.brand.accentColor,
@@ -3657,29 +3691,32 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
           if (_loading)
             Center(child: CircularProgressIndicator(color: accent))
           else
-            IndexedStack(
-              index: _tab,
-              children: [
-                _home(),
-                _appointmentsPage(),
-                _motorcyclesPage(),
-                _PartsPage(
-                  accent: accent,
-                  workshop: widget.workshop,
-                  clientId: _clientId,
-                  clientName: _profile.fullName,
-                  onOpenSupport: (product) => setState(() {
-                    _productQuestion = product;
-                    _tab = 4;
-                  }),
-                ),
-                _SupportPage(
-                  workshop: widget.workshop,
-                  accent: accent,
-                  profile: _profile,
-                  productQuestion: _productQuestion,
-                ),
-              ],
+            KeyedSubtree(
+              key: ValueKey('client-cloud-refresh-$_refreshToken'),
+              child: IndexedStack(
+                index: _tab,
+                children: [
+                  _home(),
+                  _appointmentsPage(),
+                  _motorcyclesPage(),
+                  _PartsPage(
+                    accent: accent,
+                    workshop: widget.workshop,
+                    clientId: _clientId,
+                    clientName: _profile.fullName,
+                    onOpenSupport: (product) => setState(() {
+                      _productQuestion = product;
+                      _tab = 4;
+                    }),
+                  ),
+                  _SupportPage(
+                    workshop: widget.workshop,
+                    accent: accent,
+                    profile: _profile,
+                    productQuestion: _productQuestion,
+                  ),
+                ],
+              ),
             ),
         ],
       ),
