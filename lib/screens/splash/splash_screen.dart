@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/auth/admin_auth_controller.dart';
 import '../../core/auth/admin_access_service.dart';
 import '../../core/auth/admin_oauth_intent_store.dart';
+import '../../core/auth/google_oauth_intent_store.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/branding/workshop_brand.dart';
 import '../../core/tenant/tenant_context.dart';
@@ -66,7 +67,8 @@ class _SplashScreenState extends State<SplashScreen>
 
     final pendingGoogleFromUrl =
         ApiClient.pendingGoogleIntent ??
-        Uri.base.queryParameters['google_intent'];
+        Uri.base.queryParameters['google_intent'] ??
+        await readGoogleIntent();
     final pendingGoogle = switch (pendingGoogleFromUrl) {
       'administrator' => GoogleAccountIntent.administrator,
       'client' => GoogleAccountIntent.client,

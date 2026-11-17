@@ -5,6 +5,7 @@ import '../../core/auth/admin_auth_controller.dart';
 import '../../core/auth/admin_access_service.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/auth/admin_oauth_intent_store.dart';
+import '../../core/auth/google_oauth_intent_store.dart';
 import '../../core/auth/local_workshop_admin_store.dart';
 import '../../core/branding/workshop_brand.dart';
 import '../../core/networking/api_client.dart';
@@ -590,6 +591,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     });
     final intentStore = AdminOAuthIntentStore();
     try {
+      await persistGoogleIntent(GoogleAccountIntent.administrator.name);
       await intentStore.markPending(GoogleAccountIntent.administrator);
       final started = await AuthService().signInWithGoogle(
         intent: GoogleAccountIntent.administrator.name,
@@ -617,14 +619,17 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
   Future<void> _resumeGoogle() async {
     final intentStore = AdminOAuthIntentStore();
-    final returnedAsAdministrator = ApiClient.pendingGoogleIntent ==
-        GoogleAccountIntent.administrator.name;
+    final returnedAsAdministrator =
+        ApiClient.pendingGoogleIntent ==
+            GoogleAccountIntent.administrator.name ||
+        await readGoogleIntent() == GoogleAccountIntent.administrator.name;
     if (!returnedAsAdministrator &&
         await intentStore.pendingIntent() !=
             GoogleAccountIntent.administrator) {
       return;
     }
     await intentStore.clear();
+    await clearGoogleIntent();
     if (!mounted) return;
     setState(() {
       _isLoading = true;

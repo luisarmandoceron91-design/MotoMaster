@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/auth/admin_auth_controller.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/auth/admin_oauth_intent_store.dart';
+import '../../core/auth/google_oauth_intent_store.dart';
 import '../../core/branding/workshop_brand.dart';
 import '../../core/client/client_profile_repository.dart';
 import '../../core/client/client_profile.dart';
@@ -358,6 +359,7 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
     });
     final intentStore = AdminOAuthIntentStore();
     try {
+      await persistGoogleIntent(GoogleAccountIntent.client.name);
       await intentStore.markPending(GoogleAccountIntent.client);
       final started = await _auth.signInWithGoogle(
         intent: GoogleAccountIntent.client.name,
@@ -383,13 +385,15 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
 
   Future<void> _resumeGoogle() async {
     final intentStore = AdminOAuthIntentStore();
-    final returnedAsClient = ApiClient.pendingGoogleIntent ==
-        GoogleAccountIntent.client.name;
+    final returnedAsClient =
+        ApiClient.pendingGoogleIntent == GoogleAccountIntent.client.name ||
+        await readGoogleIntent() == GoogleAccountIntent.client.name;
     if (!returnedAsClient &&
         await intentStore.pendingIntent() != GoogleAccountIntent.client) {
       return;
     }
     await intentStore.clear();
+    await clearGoogleIntent();
     final user = _auth.currentUser;
     if (user == null || !mounted) return;
     final registrationState = await _auth.googleRegistrationState();
