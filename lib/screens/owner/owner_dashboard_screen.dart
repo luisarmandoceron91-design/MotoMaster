@@ -654,6 +654,16 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     ? null
                     : AppBar(
                         backgroundColor: _panel,
+                        automaticallyImplyLeading: false,
+                        leading: _section == _Section.summary
+                            ? null
+                            : IconButton(
+                                tooltip: 'Volver al resumen',
+                                onPressed: () => setState(
+                                  () => _section = _Section.summary,
+                                ),
+                                icon: const Icon(Icons.arrow_back_rounded),
+                              ),
                         title: const Text(
                           'Centro de control',
                           style: TextStyle(fontWeight: FontWeight.w800),
@@ -916,6 +926,14 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     ),
     child: Row(
       children: [
+        if (_section != _Section.summary) ...[
+          IconButton(
+            tooltip: 'Volver al resumen',
+            onPressed: () => setState(() => _section = _Section.summary),
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+          const SizedBox(width: 8),
+        ],
         const Expanded(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,

@@ -489,6 +489,19 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
       child: Scaffold(
         appBar: AppBar(
           backgroundColor: const Color(0xFF151619),
+          automaticallyImplyLeading: false,
+          // Los módulos del taller no son rutas externas: esta flecha siempre
+          // devuelve al resumen del mismo taller.
+          leading: _selected == 0
+              ? null
+              : IconButton(
+                  tooltip: 'Volver al resumen del taller',
+                  onPressed: () => setState(() {
+                    _selected = 0;
+                    _pendingChatConversationId = null;
+                  }),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
           title: Row(
             children: [
               SizedBox.square(

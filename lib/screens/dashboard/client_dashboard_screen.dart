@@ -3558,11 +3558,20 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF15171A),
         surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          tooltip: 'Volver a talleres',
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.arrow_back_rounded),
-        ),
+        automaticallyImplyLeading: false,
+        // Las secciones son parte del mismo taller. Volver desde Chat, Citas,
+        // Mis motos o Repuestos debe llevar al inicio del dashboard, no sacar
+        // al cliente a la lista de talleres.
+        leading: _tab == 0
+            ? null
+            : IconButton(
+                tooltip: 'Volver al inicio del taller',
+                onPressed: () => setState(() {
+                  _tab = 0;
+                  _productQuestion = null;
+                }),
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
         titleSpacing: 0,
         title: Row(
           children: [
