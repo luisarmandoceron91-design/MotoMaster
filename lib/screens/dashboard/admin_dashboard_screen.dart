@@ -1003,8 +1003,6 @@ class _WorkshopOverviewState extends State<_WorkshopOverview> {
     );
   }
 
-  void _refresh() => setState(() => _future = _load());
-
   @override
   Widget build(BuildContext context) => FutureBuilder<_WorkshopOverviewData>(
     future: _future,
@@ -1034,11 +1032,6 @@ class _WorkshopOverviewState extends State<_WorkshopOverview> {
                     ),
                   ],
                 ),
-              ),
-              IconButton.filledTonal(
-                tooltip: 'Actualizar información',
-                onPressed: _refresh,
-                icon: const Icon(Icons.refresh_rounded),
               ),
             ],
           ),
