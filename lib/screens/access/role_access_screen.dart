@@ -11,7 +11,9 @@ import '../../core/client/local_client_profile_store.dart';
 import '../../core/networking/api_client.dart';
 import '../../core/tenant/tenant_context.dart';
 import '../auth/admin_login_screen.dart';
+import '../auth/admin_activation_screen.dart';
 import '../auth/client_login_screen.dart';
+import '../auth/client_registration/client_registration_screen.dart';
 import '../workshop_selection/client_workshop_selection_screen.dart';
 
 class RoleAccessScreen extends StatefulWidget {
@@ -103,7 +105,30 @@ class _RoleAccessScreenState extends State<RoleAccessScreen> {
     );
   }
 
-  void _goToAdminLogin() {
+  Future<void> _goToAdminLogin() async {
+    final auth = AuthService();
+    if (auth.currentUser != null) {
+      try {
+        final state = await auth.googleRegistrationState();
+        if (!mounted) return;
+        if (state == GoogleRegistrationState.unregistered) {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => AdminActivationScreen(
+                tenantContext: widget.tenantContext,
+                brandController: widget.brandController,
+                authController: widget.authController,
+                existingGoogleAccount: true,
+              ),
+            ),
+          );
+          return;
+        }
+      } catch (_) {
+        // Si la sesión no viene de Google se conserva el acceso normal.
+      }
+    }
+    if (!mounted) return;
     final brand = widget.brandController.value;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -124,7 +149,23 @@ class _RoleAccessScreenState extends State<RoleAccessScreen> {
     ClientProfile? profile;
     if (user != null) {
       final accountType = user.userMetadata?['account_type']?.toString();
-      if (accountType == 'client') {
+      final registrationState = await auth.googleRegistrationState();
+      if (!mounted) return;
+      if (registrationState == GoogleRegistrationState.unregistered) {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ClientRegistrationScreen(
+              tenantContext: widget.tenantContext,
+              brandController: widget.brandController,
+              authController: widget.authController,
+              existingGoogleAccount: true,
+            ),
+          ),
+        );
+        return;
+      }
+      if (accountType == 'client' ||
+          registrationState == GoogleRegistrationState.client) {
         profile = await ClientProfileRepository().getCurrentProfile();
       } else {
         // Cambiar de portal tambien cambia de identidad. Una sesion de taller
