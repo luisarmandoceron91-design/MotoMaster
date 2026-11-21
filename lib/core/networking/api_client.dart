@@ -29,6 +29,12 @@ class ApiClient {
   static bool _pendingPasswordRecovery = false;
   static bool get pendingPasswordRecovery => _pendingPasswordRecovery;
 
+  // La URL de recuperación solo es válida si el SDK logró crear una sesión.
+  // Esto evita mostrar el formulario de contraseña cuando el enlace se abrió
+  // desde otra aplicación o navegador y el intercambio PKCE no puede ocurrir.
+  static bool _recoverySessionEstablished = false;
+  static bool get recoverySessionEstablished => _recoverySessionEstablished;
+
   bool _initialized = false;
 
   bool get isInitialized => _initialized;
@@ -61,8 +67,14 @@ class ApiClient {
     );
     if (kIsWeb && _isAuthCallback(callbackUri)) {
       try {
-        await Supabase.instance.client.auth.getSessionFromUrl(callbackUri);
+        final response = await Supabase.instance.client.auth.getSessionFromUrl(
+          callbackUri,
+        );
+        if (_pendingPasswordRecovery) {
+          _recoverySessionEstablished = response.session.user != null;
+        }
       } catch (error) {
+        _recoverySessionEstablished = false;
         debugPrint('No fue posible completar el retorno OAuth: $error');
       }
     }

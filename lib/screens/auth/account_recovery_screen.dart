@@ -253,7 +253,7 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
       ),
       const SizedBox(height: 18),
       const Text(
-        'Si no aparece, revisa la carpeta de correo no deseado. El enlace vence por seguridad.',
+        'Importante: abre el enlace en este mismo navegador. Si el correo se abre en Gmail u otra app, copia el enlace y pégalo en esta misma ventana. El enlace vence por seguridad.',
         textAlign: TextAlign.center,
         style: TextStyle(color: Color(0xFF9FA2A8), fontSize: 13),
       ),

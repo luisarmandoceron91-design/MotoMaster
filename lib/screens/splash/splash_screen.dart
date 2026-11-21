@@ -78,7 +78,9 @@ class _SplashScreenState extends State<SplashScreen>
     final isPasswordRecovery =
         ApiClient.pendingPasswordRecovery ||
         Uri.base.queryParameters['recovery'] == 'password';
-    if (isPasswordRecovery && AuthService().isAuthenticated) {
+    if (isPasswordRecovery &&
+        ApiClient.recoverySessionEstablished &&
+        AuthService().isAuthenticated) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
           builder: (_) => NewPasswordScreen(
