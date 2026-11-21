@@ -76,6 +76,7 @@ class _SplashScreenState extends State<SplashScreen>
     };
     if (!mounted) return;
     final isPasswordRecovery =
+        ApiClient.pendingPasswordRecovery ||
         Uri.base.queryParameters['recovery'] == 'password';
     if (isPasswordRecovery && AuthService().isAuthenticated) {
       Navigator.of(context).pushReplacement(

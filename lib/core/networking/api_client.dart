@@ -23,6 +23,12 @@ class ApiClient {
   static String? _pendingGoogleIntent;
   static String? get pendingGoogleIntent => _pendingGoogleIntent;
 
+  // Se captura antes de que el SDK intercambie el código y limpie la URL del
+  // navegador. De esa forma el enlace del correo abre Nueva contraseña y no
+  // termina por error en la selección de rol.
+  static bool _pendingPasswordRecovery = false;
+  static bool get pendingPasswordRecovery => _pendingPasswordRecovery;
+
   bool _initialized = false;
 
   bool get isInitialized => _initialized;
@@ -38,6 +44,11 @@ class ApiClient {
     if (_initialized) return;
     final callbackUri = Uri.base;
     _pendingGoogleIntent = callbackUri.queryParameters['google_intent'];
+    final callbackFragment = Uri.splitQueryString(callbackUri.fragment);
+    _pendingPasswordRecovery =
+        callbackUri.queryParameters['recovery'] == 'password' ||
+        callbackUri.queryParameters['type'] == 'recovery' ||
+        callbackFragment['type'] == 'recovery';
     await Supabase.initialize(
       url: _supabaseUrl,
       publishableKey: _supabaseAnonKey,

@@ -214,6 +214,9 @@ class AuthService {
       UserAttributes(
         email: newEmail.trim().toLowerCase(),
         password: newPassword,
+        // Supabase puede exigir explícitamente la clave actual para cambiarla.
+        // Iniciar sesión de nuevo no sustituye este campo en esa política.
+        currentPassword: currentPassword,
       ),
     );
   }

@@ -140,8 +140,7 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
             ButtonSegment<bool>(
               value: false,
               icon: Icon(Icons.sms_outlined),
-              label: Text('Celular (próximamente)'),
-              enabled: false,
+              label: Text('Celular'),
             ),
           ],
           selected: {_emailMode},
@@ -314,7 +313,7 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Escribe los 8 dígitos enviados a ${_maskedDestination()}.',
+          'Escribe los ${_emailMode ? 8 : 6} dígitos enviados a ${_maskedDestination()}.',
           textAlign: TextAlign.center,
           style: const TextStyle(color: Color(0xFFC7C9CC)),
         ),
@@ -323,7 +322,7 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
           controller: _code,
           keyboardType: TextInputType.number,
           textAlign: TextAlign.center,
-          maxLength: 8,
+          maxLength: _emailMode ? 8 : 6,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
           decoration: InputDecoration(
@@ -333,8 +332,9 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
             fillColor: const Color(0xFF25272C),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
-          validator: (value) => value == null || value.length != 8
-              ? 'Ingresa los 8 dígitos.'
+          validator: (value) => value == null ||
+                  value.length != (_emailMode ? 8 : 6)
+              ? 'Ingresa los ${_emailMode ? 8 : 6} dígitos.'
               : null,
         ),
         if (_error != null) ...[
