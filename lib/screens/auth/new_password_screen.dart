@@ -72,7 +72,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Usa al menos 6 caracteres. Puedes crear una contraseña más larga si lo prefieres.',
+                        'Usa al menos 8 caracteres e incluye letras y números.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Color(0xFFC7C9CC)),
                       ),
@@ -165,15 +165,30 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
       await AuthService().updatePassword(_password.text);
       await AuthService().signOut();
       if (mounted) widget.onCompleted(context);
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(
-          () => _error =
-              'El enlace venció o no fue posible guardar la contraseña.',
-        );
+        setState(() => _error = _friendlyPasswordError(error));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  String _friendlyPasswordError(Object error) {
+    final detail = error.toString().toLowerCase();
+    if (detail.contains('weak_password') ||
+        detail.contains('password should') ||
+        detail.contains('password is too')) {
+      return 'La contraseña no cumple las reglas de seguridad. Usa 8 caracteres, letras y números.';
+    }
+    if (detail.contains('current_password_required')) {
+      return 'La sesión de recuperación no fue reconocida. Solicita un enlace nuevo y ábrelo una sola vez.';
+    }
+    if (detail.contains('expired') ||
+        detail.contains('invalid') ||
+        detail.contains('session')) {
+      return 'El enlace venció o ya fue usado. Solicita uno nuevo e inténtalo de inmediato.';
+    }
+    return 'No fue posible guardar la contraseña. Solicita un enlace nuevo e inténtalo nuevamente.';
   }
 }
