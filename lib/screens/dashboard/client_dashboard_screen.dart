@@ -1842,7 +1842,11 @@ class _SupportPageState extends State<_SupportPage> {
                             minLines: 1,
                             maxLines: 10,
                             keyboardType: TextInputType.multiline,
-                            textInputAction: TextInputAction.newline,
+                            // Enter envía el mensaje, igual que el botón. El
+                            // campo conserva hasta diez renglones para quien
+                            // quiera escribir un texto largo.
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => _send(),
                             decoration: InputDecoration(
                               hintText: 'Escribe un mensaje...',
                               isDense: true,

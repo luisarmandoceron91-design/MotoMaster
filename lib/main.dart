@@ -57,26 +57,32 @@ class _MotoMasterAppState extends State<MotoMasterApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Moto Master',
-      debugShowCheckedModeBanner: false,
-      locale: const Locale('es', 'CO'),
-      supportedLocales: const [Locale('es', 'CO')],
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: Colors.black,
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFFFF6A00),
-          secondary: Color(0xFFFF6A00),
-          surface: Color(0xFF111111),
+    // La personalización del taller también debe afectar los botones que
+    // usan el tema de Material; antes seguían naranjas aunque se escogiera
+    // otro color en Personalizar.
+    return ValueListenableBuilder<WorkshopBrand>(
+      valueListenable: widget.brandController,
+      builder: (context, brand, _) => MaterialApp(
+        title: 'Gestión Inteligente para Talleres',
+        debugShowCheckedModeBanner: false,
+        locale: const Locale('es', 'CO'),
+        supportedLocales: const [Locale('es', 'CO')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        theme: ThemeData(
+          useMaterial3: true,
+          brightness: Brightness.dark,
+          scaffoldBackgroundColor: Colors.black,
+          colorScheme: ColorScheme.dark(
+            primary: brand.accentColor,
+            secondary: brand.accentColor,
+            surface: const Color(0xFF111111),
+          ),
         ),
-      ),
-      home: SplashScreen(
-        tenantContext: widget.tenantContext,
-        brandController: widget.brandController,
-        authController: widget.authController,
+        home: SplashScreen(
+          tenantContext: widget.tenantContext,
+          brandController: widget.brandController,
+          authController: widget.authController,
+        ),
       ),
     );
   }

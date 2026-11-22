@@ -134,6 +134,7 @@ class ClientAppointment {
   ClientAppointment copyWith({
     String? id,
     String? status,
+    String? notes,
     String? workshopId,
     String? clientId,
     String? serviceStage,
@@ -150,7 +151,7 @@ class ClientAppointment {
     serviceType: serviceType,
     date: date,
     time: time,
-    notes: notes,
+    notes: notes ?? this.notes,
     status: status ?? this.status,
     workshopId: workshopId ?? this.workshopId,
     clientId: clientId ?? this.clientId,
@@ -648,6 +649,48 @@ class ClientServiceStore {
     if (globalIndex >= 0) global[globalIndex] = updated;
     await _saveGlobalAppointments(preferences, global);
 
+    final scoped = [
+      ...await listAppointments(appointment.workshopId, appointment.clientId),
+    ];
+    final scopedIndex = scoped.indexWhere((item) => item.id == appointment.id);
+    if (scopedIndex >= 0) scoped[scopedIndex] = updated;
+    await preferences.setString(
+      'client_appointments_${_scope(appointment.workshopId, appointment.clientId)}',
+      jsonEncode(scoped.map((item) => item.toMap()).toList()),
+    );
+    revision.value++;
+  }
+
+  /// Registra novedades del diagnóstico sin reemplazar el motivo original
+  /// indicado por el cliente. El taller y el cliente ven la misma bitácora.
+  Future<void> addAppointmentNote(
+    ClientAppointment appointment,
+    String note,
+  ) async {
+    final trimmed = note.trim();
+    if (trimmed.isEmpty) return;
+    final stamp = DateTime.now();
+    final line = '[${stamp.day.toString().padLeft(2, '0')}/${stamp.month.toString().padLeft(2, '0')} ${stamp.hour.toString().padLeft(2, '0')}:${stamp.minute.toString().padLeft(2, '0')}] $trimmed';
+    final combined = appointment.notes.trim().isEmpty
+        ? line
+        : '${appointment.notes.trim()}\n$line';
+    final updated = appointment.copyWith(notes: combined, updatedAt: stamp);
+    final cloud = _cloudClient(appointment.workshopId, null);
+    if (cloud != null && _isUuid(appointment.id)) {
+      try {
+        await cloud
+            .from('appointments')
+            .update({'notes': combined})
+            .eq('id', appointment.id);
+      } catch (_) {
+        throw const AppointmentPersistenceException();
+      }
+    }
+    final preferences = await SharedPreferences.getInstance();
+    final global = await _listGlobalAppointments(preferences);
+    final globalIndex = global.indexWhere((item) => item.id == appointment.id);
+    if (globalIndex >= 0) global[globalIndex] = updated;
+    await _saveGlobalAppointments(preferences, global);
     final scoped = [
       ...await listAppointments(appointment.workshopId, appointment.clientId),
     ];

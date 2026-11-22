@@ -153,6 +153,29 @@ class WorkshopRepository {
         .eq('client_id', user.id);
   }
 
+  /// Abre o cierra temporalmente la visibilidad pública del taller. No borra
+  /// inventario, citas ni la cuenta del administrador.
+  Future<bool> isPubliclyOpen(String workshopId) async {
+    if (!ApiClient.cloudEnabled || _client.auth.currentUser == null) return true;
+    final row = await _client
+        .from('workshops')
+        .select('status')
+        .eq('id', workshopId)
+        .maybeSingle();
+    return row?['status']?.toString() == 'active';
+  }
+
+  Future<void> setPublicAvailability(
+    String workshopId, {
+    required bool open,
+  }) async {
+    if (!ApiClient.cloudEnabled || _client.auth.currentUser == null) return;
+    await _client
+        .from('workshops')
+        .update({'status': open ? 'active' : 'inactive'})
+        .eq('id', workshopId);
+  }
+
   Future<Workshop> create({
     required String name,
     required String slug,

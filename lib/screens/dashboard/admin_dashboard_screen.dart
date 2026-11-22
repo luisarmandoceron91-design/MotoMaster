@@ -28,6 +28,7 @@ import '../../core/tenant/tenant_context.dart';
 import '../../core/workshops/trial_extension_service.dart';
 import '../../core/workshops/workshop_clients_service.dart';
 import '../../core/workshops/workshop_feedback_store.dart';
+import '../../core/workshops/workshop_repository.dart';
 import '../admin_customization/admin_customization_screen.dart';
 import '../settings/credential_settings_screen.dart';
 import '../access/role_access_screen.dart';
@@ -423,6 +424,7 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
   int _selected = 0;
   int _refreshToken = 0;
   bool _refreshing = false;
+  bool _workshopOpen = true;
   String? _pendingChatConversationId;
 
   WorkshopBrand get brand => widget.brand;
@@ -431,6 +433,57 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
   void initState() {
     super.initState();
     _loadPreferences();
+    _loadWorkshopAvailability();
+  }
+
+  Future<void> _loadWorkshopAvailability() async {
+    try {
+      final open = await WorkshopRepository().isPubliclyOpen(widget.workshopId);
+      if (mounted) setState(() => _workshopOpen = open);
+    } catch (_) {
+      // La administración local continúa disponible sin red.
+    }
+  }
+
+  Future<void> _toggleWorkshopAvailability() async {
+    final nextOpen = !_workshopOpen;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: Icon(nextOpen ? Icons.storefront_rounded : Icons.storefront_outlined),
+        title: Text(nextOpen ? '¿Abrir taller al público?' : '¿Cerrar taller al público?'),
+        content: Text(nextOpen
+            ? 'Los clientes volverán a encontrar el taller y podrán solicitar servicios.'
+            : 'Los clientes dejarán de encontrarlo temporalmente. No se borrarán citas, ventas, inventario ni chats.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(nextOpen ? 'Abrir taller' : 'Cerrar taller'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await WorkshopRepository().setPublicAvailability(
+        widget.workshopId,
+        open: nextOpen,
+      );
+      if (!mounted) return;
+      setState(() => _workshopOpen = nextOpen);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(nextOpen ? 'Taller abierto al público.' : 'Taller cerrado al público.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo cambiar el estado del taller.')),
+      );
+    }
   }
 
   Future<void> _loadPreferences() async {
@@ -440,12 +493,11 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
 
   Future<void> _refreshFromCloud() async {
     if (_refreshing) return;
-    setState(() {
-      _refreshing = true;
-      _refreshToken++;
-    });
-    // Cada panel se reconstruye y vuelve a consultar Supabase. El notifier
-    // despierta además los catálogos que estén abiertos en otra sección.
+    setState(() => _refreshing = true);
+    // No se cambia la llave de la sección: recrearla cerraba formularios,
+    // borraba filtros de Repuestos y devolvía el scroll al inicio.
+    // Los paneles escuchan este notifier y vuelven a consultar sin perder su
+    // estado de navegación.
     CommerceStore.revision.value++;
     await Future<void>.delayed(const Duration(milliseconds: 350));
     if (!mounted) return;
@@ -600,14 +652,20 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
               icon: const Icon(Icons.account_circle_outlined),
               onSelected: (value) {
                 if (value == 'logout') _confirmLogout();
-                if (value == 'settings') _openAccessSettings();
+                if (value == 'availability') _toggleWorkshopAvailability();
               },
-              itemBuilder: (_) => const [
+              itemBuilder: (_) => [
                 PopupMenuItem(
-                  value: 'settings',
+                  value: 'availability',
                   child: ListTile(
-                    leading: Icon(Icons.manage_accounts_outlined),
-                    title: Text('Mi cuenta y seguridad'),
+                    leading: Icon(
+                      _workshopOpen
+                          ? Icons.storefront_outlined
+                          : Icons.storefront_rounded,
+                    ),
+                    title: Text(
+                      _workshopOpen ? 'Cerrar taller al público' : 'Abrir taller al público',
+                    ),
                   ),
                 ),
                 PopupMenuItem(
@@ -636,13 +694,14 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
             if (_preferences.brightness < 1)
               ColoredBox(
                 color: Colors.black.withValues(
-                  alpha: (1 - _preferences.brightness).clamp(0, .28),
+                  // El rango anterior apenas se percibía en el fondo oscuro.
+                  alpha: ((1 - _preferences.brightness) * 1.55).clamp(0, .42),
                 ),
               )
             else if (_preferences.brightness > 1)
               ColoredBox(
                 color: Colors.white.withValues(
-                  alpha: ((_preferences.brightness - 1) * .16).clamp(0, .05),
+                  alpha: ((_preferences.brightness - 1) * .72).clamp(0, .14),
                 ),
               ),
             SafeArea(
@@ -1552,9 +1611,56 @@ class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
     ]);
     if (!mounted) return;
     setState(() {
-      _appointments = results[0] as List<ClientAppointment>;
+      // Una moto entregada pertenece al historial del cliente, no a la
+      // agenda operativa. Así no puede volver a aceptarse ni asignarse.
+      _appointments = (results[0] as List<ClientAppointment>)
+          .where((item) => item.isOpen)
+          .toList(growable: false);
       _mechanics = results[1] as List<WorkshopMechanic>;
     });
+  }
+
+  Future<void> _addServiceNote(ClientAppointment appointment) async {
+    final controller = TextEditingController();
+    final note = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Registrar novedad del servicio'),
+        content: TextField(
+          controller: controller,
+          minLines: 3,
+          maxLines: 6,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Daño adicional, hallazgo o novedad',
+            hintText: 'Ej. Se encontró desgaste adicional en la cadena.',
+            alignLabelWithHint: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, controller.text),
+            icon: const Icon(Icons.note_add_outlined),
+            label: const Text('Guardar novedad'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (note == null || note.trim().isEmpty) return;
+    try {
+      await _store.addAppointmentNote(appointment, note);
+      await _load();
+    } on AppointmentPersistenceException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo guardar la novedad.')),
+      );
+    }
   }
 
   @override
@@ -1621,10 +1727,22 @@ class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
                         item.serviceType,
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
+                      if (item.status == 'Solicitada')
+                        Padding(
+                          padding: const EdgeInsets.only(top: 5),
+                          child: Chip(
+                            avatar: const Icon(
+                              Icons.pending_actions_rounded,
+                              size: 17,
+                            ),
+                            label: const Text('Solicitud pendiente de aceptar'),
+                            backgroundColor: const Color(0x33FFB020),
+                          ),
+                        ),
                       Text(
                         item.clientName.trim().isEmpty
-                            ? 'Cliente registrado · ${item.motorcycleName}'
-                            : '${item.clientName} · ${item.motorcycleName}',
+                            ? 'Solicita: cliente registrado · ${item.motorcycleName}'
+                            : 'Solicita: ${item.clientName} · ${item.motorcycleName}',
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Color(0xFFADB1B8),
@@ -1737,6 +1855,14 @@ class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
                           ),
                         ),
                       ],
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () => _addServiceNote(item),
+                          icon: const Icon(Icons.note_add_outlined),
+                          label: const Text('Agregar novedad o daño'),
+                        ),
+                      ),
                     ],
                   );
                   final picker = Column(
@@ -1855,12 +1981,14 @@ class _WorkshopMechanicsPanelState extends State<_WorkshopMechanicsPanel> {
   final _feedbackStore = WorkshopFeedbackStore();
   List<WorkshopMechanic> _mechanics = const [];
   List<WorkshopFeedback> _feedback = const [];
+  List<ClientAppointment> _appointments = const [];
 
   @override
   void initState() {
     super.initState();
     WorkshopMechanicStore.revision.addListener(_load);
     WorkshopFeedbackStore.revision.addListener(_load);
+    ClientServiceStore.revision.addListener(_load);
     _load();
   }
 
@@ -1868,19 +1996,23 @@ class _WorkshopMechanicsPanelState extends State<_WorkshopMechanicsPanel> {
   void dispose() {
     WorkshopMechanicStore.revision.removeListener(_load);
     WorkshopFeedbackStore.revision.removeListener(_load);
+    ClientServiceStore.revision.removeListener(_load);
     super.dispose();
   }
 
   Future<void> _load() async {
-    final mechanics = await _store.list(
-      widget.workshopId,
-      includeInactive: true,
-    );
-    final feedback = await _feedbackStore.list(widget.workshopId);
+    final results = await Future.wait([
+      _store.list(widget.workshopId, includeInactive: true),
+      _feedbackStore.list(widget.workshopId),
+      ClientServiceStore().listWorkshopAppointments(widget.workshopId),
+    ]);
     if (!mounted) return;
     setState(() {
-      _mechanics = mechanics;
-      _feedback = feedback;
+      _mechanics = results[0] as List<WorkshopMechanic>;
+      _feedback = results[1] as List<WorkshopFeedback>;
+      _appointments = (results[2] as List<ClientAppointment>)
+          .where((item) => item.isOpen)
+          .toList(growable: false);
     });
   }
 
@@ -1929,6 +2061,15 @@ class _WorkshopMechanicsPanelState extends State<_WorkshopMechanicsPanel> {
 
   Widget _mechanicRow(WorkshopMechanic mechanic) {
     final rating = _ratingFor(mechanic.name);
+    final upcoming = _appointments
+        .where(
+          (item) =>
+              item.mechanicName.trim().toLowerCase() ==
+                  mechanic.name.trim().toLowerCase() &&
+              item.startsAt.isAfter(DateTime.now()),
+        )
+        .toList()
+      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
       leading: _mechanicAvatar(mechanic, 52),
@@ -1943,6 +2084,19 @@ class _WorkshopMechanicsPanelState extends State<_WorkshopMechanicsPanel> {
             mechanic.active ? mechanic.specialty : 'Mecánico retirado',
             style: const TextStyle(color: Color(0xFFBFC2C7), fontSize: 13),
           ),
+          if (upcoming.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Ocupado: ${upcoming.first.date.day.toString().padLeft(2, '0')}/${upcoming.first.date.month.toString().padLeft(2, '0')} · ${upcoming.first.time} · ${upcoming.first.clientName.isEmpty ? upcoming.first.motorcycleName : upcoming.first.clientName}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFFFFB020),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
           const SizedBox(height: 4),
           Row(
             children: [
@@ -2137,6 +2291,7 @@ class _WorkshopMechanicsPanelState extends State<_WorkshopMechanicsPanel> {
           : current.experienceYears.toString(),
     );
     Uint8List? photoBytes = current?.photoBytes;
+    String? validationMessage;
     final save = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -2212,6 +2367,16 @@ class _WorkshopMechanicsPanelState extends State<_WorkshopMechanicsPanel> {
                       prefixIcon: Icon(Icons.person_outline_rounded),
                     ),
                   ),
+                  if (validationMessage != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      validationMessage!,
+                      style: const TextStyle(
+                        color: Color(0xFFFF8589),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   TextField(
                     controller: specialty,
@@ -2269,7 +2434,26 @@ class _WorkshopMechanicsPanelState extends State<_WorkshopMechanicsPanel> {
               child: const Text('Cancelar'),
             ),
             FilledButton.icon(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () {
+                final years = int.tryParse(experience.text.trim());
+                final digits = phone.text.replaceAll(RegExp(r'[^0-9]'), '');
+                if (name.text.trim().length < 3) {
+                  setDialog(() => validationMessage =
+                      'Escribe el nombre completo del mecánico.');
+                  return;
+                }
+                if (years == null || years < 0 || years > 80) {
+                  setDialog(() => validationMessage =
+                      'Los años de experiencia deben estar entre 0 y 80.');
+                  return;
+                }
+                if (digits.isNotEmpty && (digits.length < 7 || digits.length > 15)) {
+                  setDialog(() => validationMessage =
+                      'El celular debe tener entre 7 y 15 números.');
+                  return;
+                }
+                Navigator.pop(context, true);
+              },
               icon: const Icon(Icons.save_outlined),
               label: const Text('Guardar'),
             ),
@@ -2536,6 +2720,7 @@ class _WorkshopChatPanel extends StatelessWidget {
     final store = LocalChatStore();
     await showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: Text('Conversación con ${conversation.clientName}'),
         content: SizedBox(
@@ -2922,7 +3107,16 @@ class _WorkshopChatPanel extends StatelessWidget {
                         minLines: 1,
                         maxLines: 10,
                         keyboardType: TextInputType.multiline,
-                        textInputAction: TextInputAction.newline,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) async {
+                          final text = controller.text.trim();
+                          if (text.isEmpty) return;
+                          await repository.sendMessage(
+                            conversationId: conversationId,
+                            body: text,
+                          );
+                          controller.clear();
+                        },
                         decoration: InputDecoration(
                           hintText: 'Escribe una respuesta...',
                           isDense: true,
@@ -5240,10 +5434,13 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
             fontWeight: FontWeight.w900,
           ),
         ),
-        IconButton(
-          tooltip: 'Imprimir comprobante',
-          onPressed: () => _printPointOfSale(sale),
-          icon: const Icon(Icons.print_outlined),
+        Tooltip(
+          message: 'Abrir comprobante de la venta',
+          child: OutlinedButton.icon(
+            onPressed: () => _printPointOfSale(sale),
+            icon: const Icon(Icons.receipt_long_outlined, size: 18),
+            label: const Text('Recibo'),
+          ),
         ),
       ],
     ),
@@ -5280,10 +5477,13 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
             ],
           ),
         ),
-        IconButton(
-          tooltip: 'Imprimir factura o recibo',
-          onPressed: () => _printReceipt(order),
-          icon: const Icon(Icons.print_outlined),
+        Tooltip(
+          message: 'Abrir factura o comprobante de la venta',
+          child: OutlinedButton.icon(
+            onPressed: () => _printReceipt(order),
+            icon: const Icon(Icons.receipt_long_outlined, size: 18),
+            label: const Text('Factura'),
+          ),
         ),
         PopupMenuButton<CommerceOrderStatus>(
           tooltip: 'Actualizar pedido',
@@ -5428,6 +5628,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
     var includesPistons = current?.includesPistons ?? false;
     var includesRings = current?.includesRings ?? false;
     var isKit = current?.isKit ?? false;
+    String? productValidation;
     final save = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -5450,6 +5651,24 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (productValidation != null)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0x33FF6268),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFFF8589)),
+                      ),
+                      child: Text(
+                        productValidation!,
+                        style: const TextStyle(
+                          color: Color(0xFFFFB3B5),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                   InkWell(
                     borderRadius: BorderRadius.circular(16),
                     onTap: () async {
@@ -5641,10 +5860,20 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                     controller: description,
                     maxLines: 4,
                     scrollPadding: const EdgeInsets.only(bottom: 190),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Descripción para el cliente',
-                      prefixIcon: Icon(Icons.description_outlined),
+                      prefixIcon: const Icon(Icons.description_outlined),
+                      suffixIcon: description.text.trim().isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: 'Borrar descripción',
+                              onPressed: () => setDialogState(() {
+                                description.clear();
+                              }),
+                              icon: const Icon(Icons.clear_rounded),
+                            ),
                     ),
+                    onChanged: (_) => setDialogState(() {}),
                   ),
                   const SizedBox(height: 10),
                   ExpansionTile(
@@ -5783,7 +6012,20 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                           child: const Text('Cancelar'),
                         ),
                         FilledButton(
-                          onPressed: () => Navigator.pop(context, true),
+                          onPressed: () {
+                            final salePrice = int.tryParse(price.text.trim()) ?? 0;
+                            final units = int.tryParse(stock.text.trim());
+                            if (name.text.trim().isEmpty ||
+                                brand.text.trim().isEmpty ||
+                                salePrice <= 0 ||
+                                units == null ||
+                                units < 0) {
+                              setDialogState(() => productValidation =
+                                  'Revisa los campos obligatorios: nombre, marca, precio de venta y unidades disponibles.');
+                              return;
+                            }
+                            Navigator.pop(context, true);
+                          },
                           child: const Text('Guardar producto'),
                         ),
                       ],
