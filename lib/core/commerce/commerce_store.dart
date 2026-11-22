@@ -321,9 +321,10 @@ class CommerceStore {
         var query = ApiClient().client
             .from('orders')
             .select(
-              '*, order_items(product_id, product_name, quantity, unit_price), '
-              'receipts(receipt_number, dian_invoice_url, cufe), '
-              'payments(provider_payment_id)',
+              // Los recibos y pagos se consultan por separado cuando se abre
+              // el detalle. Una relación secundaria sin permisos no puede
+              // ocultar ventas reales del tablero del taller.
+              '*, order_items(product_id, product_name, quantity, unit_price)',
             );
         if (workshopId != null) query = query.eq('workshop_id', workshopId);
         if (clientId != null) query = query.eq('client_id', clientId);
@@ -334,9 +335,26 @@ class CommerceStore {
         await _saveOrders(cloud);
         return cloud;
       } catch (_) {
-        // La nube es la fuente oficial: no mostramos pedidos locales de otro
-        // momento si no logramos leer la base compartida.
-        return const [];
+        // Como último respaldo consultamos el encabezado de la venta. Así una
+        // venta confirmada sigue apareciendo de inmediato aun si el detalle
+        // de un ítem antiguo quedó inconsistente en la nube.
+        try {
+          dynamic fallback = ApiClient().client.from('orders').select();
+          if (workshopId != null) {
+            fallback = fallback.eq('workshop_id', workshopId);
+          }
+          if (clientId != null) fallback = fallback.eq('client_id', clientId);
+          final rows = await fallback.order('created_at', ascending: false);
+          final cloud = (rows as List)
+              .map((row) => _cloudOrder(Map<String, dynamic>.from(row)))
+              .toList();
+          await _saveOrders(cloud);
+          return cloud;
+        } catch (_) {
+          // La nube es la fuente oficial: no mostramos pedidos locales de
+          // otro momento si no logramos leer la base compartida.
+          return const [];
+        }
       }
     }
     final prefs = await SharedPreferences.getInstance();
@@ -472,10 +490,18 @@ class CommerceStore {
       clientId: row['client_id'].toString(),
       clientName: 'Cliente',
       productId: firstItem['product_id']?.toString() ?? '',
-      productName: firstItem['product_name']?.toString() ?? '',
+      productName:
+          firstItem['product_name']?.toString() ??
+          (row['sale_channel']?.toString() == 'local'
+              ? 'Venta en el local'
+              : 'Venta virtual'),
       quantity: (firstItem['quantity'] as num?)?.toInt() ?? 1,
       unitPriceCents:
-          ((firstItem['unit_price'] as num?)?.toDouble() ?? 0).round() * 100,
+          ((firstItem['unit_price'] as num?)?.toDouble() ??
+                      (row['subtotal'] as num?)?.toDouble() ??
+                      0)
+                  .round() *
+              100,
       platformFeeCents:
           ((row['platform_fee'] as num?)?.toDouble() ?? 0).round() * 100,
       paymentMethod: row['payment_method']?.toString() ?? 'Pago virtual',

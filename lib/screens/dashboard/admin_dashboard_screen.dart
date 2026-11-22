@@ -484,9 +484,19 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
     final media = MediaQuery.of(
       context,
     ).copyWith(textScaler: TextScaler.linear(_preferences.textScale));
-    return MediaQuery(
-      data: media,
-      child: Scaffold(
+    return PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _selected != 0) {
+          setState(() {
+            _selected = 0;
+            _pendingChatConversationId = null;
+          });
+        }
+      },
+      child: MediaQuery(
+        data: media,
+        child: Scaffold(
         appBar: AppBar(
           backgroundColor: const Color(0xFF151619),
           automaticallyImplyLeading: false,
@@ -671,6 +681,7 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );
@@ -4195,6 +4206,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
   String _category = 'Todos';
   int _section = 0;
   StreamSubscription<List<Map<String, dynamic>>>? _cloudSalesSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _cloudProductsSubscription;
 
   @override
   void initState() {
@@ -4206,6 +4218,11 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
           .stream(primaryKey: ['id'])
           .eq('workshop_id', widget.workshopId)
           .listen((_) => _load());
+      _cloudProductsSubscription = ApiClient().client
+          .from('products')
+          .stream(primaryKey: ['id'])
+          .eq('workshop_id', widget.workshopId)
+          .listen((_) => _load());
     }
     _load();
   }
@@ -4214,6 +4231,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
   void dispose() {
     CommerceStore.revision.removeListener(_load);
     _cloudSalesSubscription?.cancel();
+    _cloudProductsSubscription?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
@@ -4641,6 +4659,32 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                       color: widget.brand.accentColor,
                       fontSize: 21,
                       fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: (product.stock > 0
+                              ? const Color(0xFF39D98A)
+                              : const Color(0xFFFF6B72))
+                          .withValues(alpha: .14),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      product.stock > 0
+                          ? '${product.stock} unidades disponibles'
+                          : 'Agotado',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: product.stock > 0
+                            ? const Color(0xFF39D98A)
+                            : const Color(0xFFFF6B72),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 10),

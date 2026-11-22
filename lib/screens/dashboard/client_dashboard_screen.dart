@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
@@ -495,11 +497,19 @@ class _PartsPageState extends State<_PartsPage> {
   List<CommerceProduct> _products = const [];
   List<CommerceOrder> _orders = const [];
   bool _loading = true;
+  StreamSubscription<List<Map<String, dynamic>>>? _cloudProductsSubscription;
 
   @override
   void initState() {
     super.initState();
     CommerceStore.revision.addListener(_reload);
+    if (ApiClient.cloudEnabled) {
+      _cloudProductsSubscription = ApiClient().client
+          .from('products')
+          .stream(primaryKey: ['id'])
+          .eq('workshop_id', widget.workshop.id)
+          .listen((_) => _reload());
+    }
     _reload();
   }
 
@@ -520,6 +530,7 @@ class _PartsPageState extends State<_PartsPage> {
   @override
   void dispose() {
     CommerceStore.revision.removeListener(_reload);
+    _cloudProductsSubscription?.cancel();
     _search.dispose();
     super.dispose();
   }
@@ -3553,8 +3564,18 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final accent = widget.brand.accentColor;
-    return Scaffold(
-      backgroundColor: const Color(0xFF090A0B),
+    return PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _tab != 0) {
+          setState(() {
+            _tab = 0;
+            _productQuestion = null;
+          });
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF090A0B),
       appBar: AppBar(
         backgroundColor: const Color(0xFF15171A),
         surfaceTintColor: Colors.transparent,
@@ -3783,6 +3804,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
               label: 'Soporte',
             ),
           ],
+        ),
         ),
       ),
     );
