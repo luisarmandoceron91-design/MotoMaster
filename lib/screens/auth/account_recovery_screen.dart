@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-
 import '../../core/auth/auth_service.dart';
-import 'new_password_screen.dart';
 
 enum RecoveryAccountType { administrator, client }
 
@@ -24,11 +21,7 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
   static const _accent = Color(0xFFFF6500);
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
-  final _phone = TextEditingController(text: '+57 ');
-  final _code = TextEditingController();
-  bool _emailMode = true;
   bool _loading = false;
-  bool _codeSent = false;
   bool _emailLinkSent = false;
   String? _error;
 
@@ -41,8 +34,6 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
   @override
   void dispose() {
     _email.dispose();
-    _phone.dispose();
-    _code.dispose();
     super.dispose();
   }
 
@@ -89,11 +80,7 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
                       ),
                     ],
                   ),
-                  child: _emailLinkSent
-                      ? _emailLinkSentBody()
-                      : _codeSent
-                      ? _verificationCodeBody()
-                      : _requestBody(),
+                  child: _emailLinkSent ? _emailLinkSentBody() : _requestBody(),
                 ),
               ),
             ),
@@ -130,68 +117,23 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
           style: const TextStyle(color: Color(0xFFC7C9CC), height: 1.4),
         ),
         const SizedBox(height: 22),
-        SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment<bool>(
-              value: true,
-              icon: Icon(Icons.email_outlined),
-              label: Text('Correo'),
+        TextFormField(
+          controller: _email,
+          keyboardType: TextInputType.emailAddress,
+          autocorrect: false,
+          decoration: InputDecoration(
+            labelText: 'Correo electrónico registrado',
+            prefixIcon: const Icon(Icons.alternate_email_rounded),
+            filled: true,
+            fillColor: const Color(0xFF25272C),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
             ),
-            ButtonSegment<bool>(
-              value: false,
-              icon: Icon(Icons.sms_outlined),
-              label: Text('Celular'),
-            ),
-          ],
-          selected: {_emailMode},
-          onSelectionChanged: (selection) => setState(() {
-            _emailMode = selection.first;
-            _error = null;
-          }),
-        ),
-        const SizedBox(height: 20),
-        if (_emailMode)
-          TextFormField(
-            controller: _email,
-            keyboardType: TextInputType.emailAddress,
-            autocorrect: false,
-            decoration: InputDecoration(
-              labelText: 'Correo electrónico registrado',
-              prefixIcon: const Icon(Icons.alternate_email_rounded),
-              filled: true,
-              fillColor: const Color(0xFF25272C),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            validator: (value) => value == null || !value.contains('@')
-                ? 'Ingresa el correo usado al registrarte.'
-                : null,
-          )
-        else
-          TextFormField(
-            controller: _phone,
-            keyboardType: TextInputType.phone,
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ]')),
-            ],
-            decoration: InputDecoration(
-              labelText: 'Celular registrado con indicativo',
-              hintText: '+57 3001234567',
-              prefixIcon: const Icon(Icons.phone_android_outlined),
-              filled: true,
-              fillColor: const Color(0xFF25272C),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            validator: (value) =>
-                value == null ||
-                    !value.trim().startsWith('+') ||
-                    value.replaceAll(RegExp(r'\D'), '').length < 10
-                ? 'Incluye el indicativo y un celular válido.'
-                : null,
           ),
+          validator: (value) => value == null || !value.contains('@')
+              ? 'Ingresa el correo usado al registrarte.'
+              : null,
+        ),
         if (_error != null) ...[
           const SizedBox(height: 14),
           Text(
@@ -204,7 +146,7 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
         SizedBox(
           height: 54,
           child: FilledButton.icon(
-            onPressed: _loading ? null : _sendRecovery,
+            onPressed: _loading ? null : _sendEmail,
             style: FilledButton.styleFrom(
               backgroundColor: _accent,
               foregroundColor: Colors.black,
@@ -219,7 +161,7 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
                   )
                 : const Icon(Icons.send_rounded),
             label: Text(
-              _emailMode ? 'Enviar enlace al correo' : 'Enviar código por SMS',
+              'Enviar enlace al correo',
               style: TextStyle(fontWeight: FontWeight.w900),
             ),
           ),
@@ -281,120 +223,11 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
     ],
   );
 
-  Widget _verificationCodeBody() => Form(
-    key: _formKey,
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: IconButton(
-            tooltip: 'Volver',
-            onPressed: _loading
-                ? null
-                : () => setState(() {
-                    _codeSent = false;
-                    _error = null;
-                  }),
-            icon: const Icon(Icons.arrow_back_rounded),
-          ),
-        ),
-        Icon(
-          _emailMode ? Icons.mark_email_unread_outlined : Icons.sms_outlined,
-          color: _accent,
-          size: 58,
-        ),
-        const SizedBox(height: 14),
-        const Text(
-          'Verifica el código',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Escribe los ${_emailMode ? 8 : 6} dígitos enviados a ${_maskedDestination()}.',
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: Color(0xFFC7C9CC)),
-        ),
-        const SizedBox(height: 22),
-        TextFormField(
-          controller: _code,
-          keyboardType: TextInputType.number,
-          textAlign: TextAlign.center,
-          maxLength: _emailMode ? 8 : 6,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
-          decoration: InputDecoration(
-            counterText: '',
-            labelText: 'Código de verificación',
-            filled: true,
-            fillColor: const Color(0xFF25272C),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-          validator: (value) => value == null ||
-                  value.length != (_emailMode ? 8 : 6)
-              ? 'Ingresa los ${_emailMode ? 8 : 6} dígitos.'
-              : null,
-        ),
-        if (_error != null) ...[
-          const SizedBox(height: 12),
-          Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Color(0xFFFF8C8C)),
-          ),
-        ],
-        const SizedBox(height: 22),
-        SizedBox(
-          height: 54,
-          child: FilledButton.icon(
-            onPressed: _loading ? null : _verifyCode,
-            style: FilledButton.styleFrom(
-              backgroundColor: _accent,
-              foregroundColor: Colors.black,
-            ),
-            icon: _loading
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.verified_user_outlined),
-            label: const Text(
-              'Verificar y continuar',
-              style: TextStyle(fontWeight: FontWeight.w900),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        TextButton.icon(
-          onPressed: _loading ? null : (_emailMode ? _sendEmail : _sendSms),
-          icon: const Icon(Icons.refresh_rounded, size: 18),
-          label: const Text('Reenviar código'),
-        ),
-      ],
-    ),
-  );
-
   String _maskedDestination() {
-    if (_emailMode) {
-      final value = _email.text.trim();
-      final at = value.indexOf('@');
-      if (at <= 1) return value;
-      return '${value.substring(0, 2)}••••${value.substring(at)}';
-    }
-    final digits = _phone.text.replaceAll(RegExp(r'\D'), '');
-    if (digits.length < 4) return _phone.text;
-    return '••••••${digits.substring(digits.length - 4)}';
-  }
-
-  Future<void> _sendRecovery() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (_emailMode) {
-      await _sendEmail();
-    } else {
-      await _sendSms();
-    }
+    final value = _email.text.trim();
+    final at = value.indexOf('@');
+    if (at <= 1) return value;
+    return '${value.substring(0, 2)}••••${value.substring(at)}';
   }
 
   Future<void> _sendEmail() async {
@@ -417,63 +250,4 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
     }
   }
 
-  Future<void> _sendSms() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      await AuthService().sendPhoneRecoveryCode(_phone.text);
-      if (mounted) setState(() => _codeSent = true);
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => _error =
-              'El envío SMS se activará cuando conectemos Supabase y el proveedor de mensajes.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _verifyCode() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final response = _emailMode
-          ? await AuthService().verifyEmailRecoveryCode(
-              email: _email.text,
-              code: _code.text,
-            )
-          : await AuthService().verifyPhoneRecoveryCode(
-              phone: _phone.text,
-              code: _code.text,
-            );
-      if (response.session == null) {
-        throw StateError('No se creó una sesión de recuperación.');
-      }
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(
-          builder: (_) => NewPasswordScreen(
-            onCompleted: (recoveryContext) =>
-                Navigator.of(recoveryContext).pop(),
-          ),
-        ),
-      );
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => _error =
-              'El código no es válido, venció o el servicio de envío aún no está conectado.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
 }

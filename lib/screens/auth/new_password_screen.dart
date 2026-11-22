@@ -163,7 +163,6 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
     });
     try {
       await AuthService().updatePassword(_password.text);
-      await AuthService().signOut();
       if (mounted) widget.onCompleted(context);
     } catch (error) {
       if (mounted) {

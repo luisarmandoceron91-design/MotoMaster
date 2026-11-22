@@ -75,9 +75,7 @@ class _SplashScreenState extends State<SplashScreen>
       _ => await AdminOAuthIntentStore().pendingIntent(),
     };
     if (!mounted) return;
-    final isPasswordRecovery =
-        ApiClient.pendingPasswordRecovery ||
-        Uri.base.queryParameters['recovery'] == 'password';
+    final isPasswordRecovery = ApiClient.pendingPasswordRecovery;
     if (isPasswordRecovery &&
         ApiClient.recoverySessionEstablished &&
         AuthService().isAuthenticated) {
@@ -86,8 +84,15 @@ class _SplashScreenState extends State<SplashScreen>
           builder: (_) => NewPasswordScreen(
             onCompleted: (recoveryContext) {
               if (!mounted) return;
+              ApiClient.completePasswordRecovery();
               Navigator.of(recoveryContext).pushAndRemoveUntil(
-                MaterialPageRoute<void>(builder: (_) => _roleAccessScreen()),
+                MaterialPageRoute<void>(
+                  builder: (_) => SplashScreen(
+                    tenantContext: widget.tenantContext,
+                    brandController: widget.brandController,
+                    authController: widget.authController,
+                  ),
+                ),
                 (_) => false,
               );
             },

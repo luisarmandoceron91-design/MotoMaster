@@ -35,6 +35,11 @@ class ApiClient {
   static bool _recoverySessionEstablished = false;
   static bool get recoverySessionEstablished => _recoverySessionEstablished;
 
+  static void completePasswordRecovery() {
+    _pendingPasswordRecovery = false;
+    _recoverySessionEstablished = false;
+  }
+
   bool _initialized = false;
 
   bool get isInitialized => _initialized;
