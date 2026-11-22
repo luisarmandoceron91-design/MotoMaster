@@ -72,7 +72,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Usa al menos 8 caracteres e incluye letras y números.',
+                        'Usa al menos 6 caracteres. Puedes combinar letras, números o símbolos.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Color(0xFFC7C9CC)),
                       ),
@@ -178,7 +178,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
     if (detail.contains('weak_password') ||
         detail.contains('password should') ||
         detail.contains('password is too')) {
-      return 'La contraseña no cumple las reglas de seguridad. Usa 8 caracteres, letras y números.';
+      return 'Esta clave fue rechazada por la protección del servidor por ser muy común. Prueba una diferente; por ejemplo, agrega una mayúscula o un símbolo.';
     }
     if (detail.contains('current_password_required')) {
       return 'La sesión de recuperación no fue reconocida. Solicita un enlace nuevo y ábrelo una sola vez.';
