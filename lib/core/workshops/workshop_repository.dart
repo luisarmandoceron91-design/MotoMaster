@@ -63,13 +63,13 @@ class WorkshopRepository {
       final workshop = await _local.find(workshopId);
       return workshop?.hasPlatformAccess ?? false;
     }
-    final rows = await _client
-        .rpc('list_active_workshops')
+    final available = await _client
+        .rpc(
+          'is_workshop_available',
+          params: {'target_workshop_id': workshopId},
+        )
         .timeout(const Duration(seconds: 5));
-    return (rows as List).any(
-      (row) =>
-          Map<String, dynamic>.from(row as Map)['id']?.toString() == workshopId,
-    );
+    return available == true;
   }
 
   Workshop _withCurrentAccountAccess(
@@ -112,6 +112,7 @@ class WorkshopRepository {
         .select()
         .inFilter('id', ids)
         .isFilter('deleted_at', null)
+        .eq('status', 'active')
         // Al abrir en un equipo nuevo no existe un tenant en caché. Preferimos
         // el taller administrado más reciente, en vez del nombre alfabético de
         // una antigua plantilla (por ejemplo "MOTO MASTER").
@@ -156,7 +157,8 @@ class WorkshopRepository {
   /// Abre o cierra temporalmente la visibilidad pública del taller. No borra
   /// inventario, citas ni la cuenta del administrador.
   Future<bool> isPubliclyOpen(String workshopId) async {
-    if (!ApiClient.cloudEnabled || _client.auth.currentUser == null) return true;
+    if (!ApiClient.cloudEnabled || _client.auth.currentUser == null)
+      return true;
     final row = await _client
         .from('workshops')
         .select('status')

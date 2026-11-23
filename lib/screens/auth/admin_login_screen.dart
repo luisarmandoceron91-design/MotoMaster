@@ -482,6 +482,14 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         preloadedWorkshops ?? await WorkshopRepository().listManaged();
     if (workshops.isNotEmpty) {
       final workshop = workshops.first;
+      final isAvailable = await WorkshopRepository().isAvailableForClients(
+        workshop.id,
+      );
+      if (!isAvailable) {
+        await AuthService().signOut();
+        if (mounted) setState(() => _loginError = _suspendedMessage);
+        return;
+      }
       await widget.tenantContext.setTenant(
         Tenant(tenantId: workshop.id, name: workshop.name),
       );
@@ -513,9 +521,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       );
       return;
     }
-    await widget.tenantContext.clear();
-    widget.brandController.value = WorkshopBrand.newWorkshop;
-    if (mounted) _openCustomization();
+    await AuthService().signOut();
+    if (mounted) setState(() => _loginError = _suspendedMessage);
   }
 
   void _openCustomization() {
@@ -670,10 +677,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       if (accessRole == AdminAccessRole.workshopSuspended) {
         await AuthService().signOut();
         if (mounted) {
-          setState(
-            () => _loginError =
-                'Este taller está desactivado. El propietario de la plataforma debe reactivarlo.',
-          );
+          setState(() => _loginError = _suspendedMessage);
         }
         return;
       }

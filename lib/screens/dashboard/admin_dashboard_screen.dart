@@ -139,6 +139,7 @@ class _TrialAccessGateState extends State<_TrialAccessGate> {
   AdminAccessRole? _cloudAccessRole;
   Timer? _timer;
   bool _showingDeactivation = false;
+  bool _workshopDeactivatedInCloud = false;
 
   @override
   void initState() {
@@ -154,22 +155,42 @@ class _TrialAccessGateState extends State<_TrialAccessGate> {
   }
 
   Future<void> _refresh() async {
+    LocalWorkshopAdminAccount? account;
     if (widget.store != null) {
-      final account = await widget.store!.loadAccount();
-      if (mounted) setState(() => _account = account);
-      if (account?.accessState == WorkshopAccessState.suspended) {
-        _announceDeactivation();
-      }
-      return;
+      account = await widget.store!.loadAccount();
     }
+
+    var deactivatedInCloud = false;
     try {
-      final role = await AdminAccessService().resolveRole();
-      if (mounted) setState(() => _cloudAccessRole = role);
-      if (role == AdminAccessRole.workshopSuspended) {
-        _announceDeactivation();
+      if (ApiClient.cloudEnabled &&
+          widget.tenantContext.currentTenantId.isNotEmpty) {
+        deactivatedInCloud = !(await WorkshopRepository().isAvailableForClients(
+          widget.tenantContext.currentTenantId,
+        ));
       }
     } catch (_) {
-      // Una falla temporal de red no debe reemplazar el último estado validado.
+      // Una falla temporal de red no debe expulsar una sesión abierta.
+    }
+
+    AdminAccessRole? role;
+    if (widget.store == null) {
+      try {
+        role = await AdminAccessService().resolveRole();
+      } catch (_) {
+        // Se conserva el último rol válido cuando la red falla.
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      if (widget.store != null) _account = account;
+      if (role != null) _cloudAccessRole = role;
+      _workshopDeactivatedInCloud = deactivatedInCloud;
+    });
+    if (deactivatedInCloud ||
+        account?.accessState == WorkshopAccessState.suspended ||
+        role == AdminAccessRole.workshopSuspended) {
+      _announceDeactivation();
     }
   }
 
@@ -180,11 +201,16 @@ class _TrialAccessGateState extends State<_TrialAccessGate> {
       context,
       isStillDeactivated: () async {
         if (widget.store != null) {
-          final account = await widget.store!.loadAccount();
-          return account?.accessState == WorkshopAccessState.suspended;
+          final cloudAvailable = await WorkshopRepository()
+              .isAvailableForClients(widget.tenantContext.currentTenantId);
+          return !cloudAvailable;
         }
-        return await AdminAccessService().resolveRole() ==
-            AdminAccessRole.workshopSuspended;
+        final cloudAvailable = await WorkshopRepository().isAvailableForClients(
+          widget.tenantContext.currentTenantId,
+        );
+        return !cloudAvailable ||
+            await AdminAccessService().resolveRole() ==
+                AdminAccessRole.workshopSuspended;
       },
     );
     _showingDeactivation = false;
@@ -198,7 +224,8 @@ class _TrialAccessGateState extends State<_TrialAccessGate> {
     final account = _account;
     final cloudSuspended =
         widget.store == null &&
-        _cloudAccessRole == AdminAccessRole.workshopSuspended;
+        (_cloudAccessRole == AdminAccessRole.workshopSuspended ||
+            _workshopDeactivatedInCloud);
     final cloudExpired =
         widget.store == null &&
         _cloudAccessRole == AdminAccessRole.workshopExpired;
