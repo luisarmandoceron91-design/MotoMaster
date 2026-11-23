@@ -9,9 +9,11 @@ Future<bool> showWorkshopDeactivationNotice(
   BuildContext context, {
   String supportEmail = 'luisarmandoceron91@gmail.com',
   String supportPhone = '',
+  Future<bool> Function()? isStillDeactivated,
 }) async {
   var secondsRemaining = 30;
   Timer? timer;
+  var checkingAvailability = false;
 
   final finished = await showDialog<bool>(
     context: context,
@@ -27,6 +29,24 @@ Future<bool> showWorkshopDeactivationNotice(
             activeTimer.cancel();
             Navigator.of(dialogContext).pop(true);
             return;
+          }
+          if (isStillDeactivated != null &&
+              secondsRemaining % 3 == 0 &&
+              !checkingAvailability) {
+            checkingAvailability = true;
+            () async {
+              try {
+                final stillDeactivated = await isStillDeactivated();
+                if (!stillDeactivated && dialogContext.mounted) {
+                  activeTimer.cancel();
+                  Navigator.of(dialogContext).pop(false);
+                }
+              } catch (_) {
+                // Si la red falla, el aviso sigue hasta poder comprobarlo.
+              } finally {
+                checkingAvailability = false;
+              }
+            }();
           }
           setDialogState(() => secondsRemaining--);
         });

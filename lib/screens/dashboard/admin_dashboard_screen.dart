@@ -176,7 +176,18 @@ class _TrialAccessGateState extends State<_TrialAccessGate> {
   Future<void> _announceDeactivation() async {
     if (_showingDeactivation || !mounted) return;
     _showingDeactivation = true;
-    final finished = await showWorkshopDeactivationNotice(context);
+    final finished = await showWorkshopDeactivationNotice(
+      context,
+      isStillDeactivated: () async {
+        if (widget.store != null) {
+          final account = await widget.store!.loadAccount();
+          return account?.accessState == WorkshopAccessState.suspended;
+        }
+        return await AdminAccessService().resolveRole() ==
+            AdminAccessRole.workshopSuspended;
+      },
+    );
+    _showingDeactivation = false;
     if (finished && mounted) {
       await widget.onDeactivated();
     }

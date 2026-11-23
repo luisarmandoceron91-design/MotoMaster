@@ -3545,7 +3545,10 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
               ? 'luisarmandoceron91@gmail.com'
               : widget.authController.email.trim(),
           supportPhone: widget.authController.phone,
+          isStillDeactivated: () async => !(await WorkshopRepository()
+              .isAvailableForClients(widget.workshop.id)),
         );
+        _showingDeactivation = false;
         if (finished && mounted) await _signOut();
       }
     } catch (_) {
