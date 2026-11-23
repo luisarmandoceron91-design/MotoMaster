@@ -39,6 +39,30 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     _document.text = widget.authController.document;
     _email.text = widget.authController.email;
     _phone.text = widget.authController.phone;
+    _restoreCloudProfile();
+  }
+
+  Future<void> _restoreCloudProfile() async {
+    final restored = await widget.authController.restoreOwnerProfileFromCloud();
+    if (!restored || !mounted) return;
+    if (widget.authController.hasOwnerProfile) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => OwnerDashboardScreen(
+            authController: widget.authController,
+            tenantContext: widget.tenantContext,
+            brandController: widget.brandController,
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _name.text = widget.authController.fullName;
+      _document.text = widget.authController.document;
+      _email.text = widget.authController.email;
+      _phone.text = widget.authController.phone;
+    });
   }
 
   @override

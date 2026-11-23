@@ -205,7 +205,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     if (mounted) _loadCloudData();
   }
 
-  Future<void> _loadCloudData({bool silent = false}) async {
+  Future<void> _loadCloudData({
+    bool silent = false,
+    bool showFeedback = false,
+  }) async {
     if (_loadingCloudData) {
       _cloudReloadQueued = true;
       return;
@@ -214,6 +217,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     if (!_ownerService.hasCloudSession) {
       try {
         await _loadLocalTrialRequests();
+        if (showFeedback && mounted) {
+          _toast(
+            'No hay sesión propietaria en la nube. Ingresa con Google o con el correo del propietario para actualizar todos los talleres.',
+          );
+        }
       } finally {
         _loadingCloudData = false;
         if (_cloudReloadQueued && mounted) {
@@ -399,6 +407,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         }
         _deduplicateWorkshopRecords();
       });
+      if (showFeedback && mounted) {
+        _toast('Centro de control actualizado con datos en tiempo real.');
+      }
     } catch (error) {
       await _loadLocalTrialRequests();
       if (mounted && !silent) {
@@ -675,7 +686,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                             tooltip: 'Actualizar datos desde la nube',
                             onPressed: _loadingCloudData
                                 ? null
-                                : () => _loadCloudData(),
+                                : () => _loadCloudData(showFeedback: true),
                             icon: const Icon(Icons.refresh_rounded),
                           ),
                           IconButton(
@@ -1078,7 +1089,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               : 'Datos reales disponibles en este dispositivo. Conecta la cuenta propietaria para administrar toda la plataforma.',
           IconButton(
             tooltip: 'Actualizar datos',
-            onPressed: _loadingCloudData ? null : _loadCloudData,
+            onPressed: _loadingCloudData
+                ? null
+                : () => _loadCloudData(showFeedback: true),
             icon: const Icon(Icons.refresh_rounded),
           ),
         ),

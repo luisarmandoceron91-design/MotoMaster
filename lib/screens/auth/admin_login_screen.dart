@@ -439,8 +439,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         }
         await auth.signOut();
       }
-      final ownerEmail = widget.authController.email.trim();
-      if (ownerEmail.isEmpty) return;
+      final ownerEmail = widget.authController.email.trim().isEmpty
+          ? AdminAuthController.defaultOwnerEmail
+          : widget.authController.email.trim();
       await auth.signIn(email: ownerEmail, password: password);
       final role = await AdminAccessService().resolveRole();
       if (role != AdminAccessRole.platformOwner) {

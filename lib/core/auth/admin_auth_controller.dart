@@ -7,6 +7,7 @@ import '../security/password_kdf.dart';
 
 class AdminAuthController extends ChangeNotifier {
   static const initialUsername = 'luisarmandoceron1322';
+  static const defaultOwnerEmail = 'luisarmandoceron91@gmail.com';
   static const _initialPasswordHash =
       'e79b1a517ab04cf8305cd47a9e11668b0720eb1b94fd9e9d2993f9231938446b';
   static const recoveryDemoCode = '123456';
@@ -255,10 +256,9 @@ class AdminAuthController extends ChangeNotifier {
     if (!ApiClient.cloudEnabled || !ApiClient().isInitialized) return null;
     final client = ApiClient().client;
     final user = client.auth.currentUser;
-    if (user == null) {
-      return 'El perfil se guardó en este equipo, pero falta iniciar sesión '
-          'con el correo del propietario para sincronizarlo en la nube.';
-    }
+    // El almacenamiento local mantiene el perfil en este dispositivo. La
+    // sincronización se reintentará al ingresar con la cuenta propietaria.
+    if (user == null) return null;
     try {
       final existing = await client
           .from('profiles')
