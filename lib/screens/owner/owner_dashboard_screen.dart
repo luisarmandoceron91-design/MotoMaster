@@ -35,8 +35,11 @@ const _workshopFilters = <String>[
   'Todos',
   'Nuevos / Prueba',
   'Activos permanentes',
-  'Suspendidos',
+  'Desactivados',
 ];
+
+String _displayWorkshopStatus(String status) =>
+    status == 'Suspendido' ? 'Desactivado' : status;
 
 enum _Section {
   summary,
@@ -1095,7 +1098,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               _success,
             ),
             _metric(
-              'Suspendidos',
+              'Desactivados',
               '$suspended',
               Icons.pause_circle_outline,
               _danger,
@@ -1528,7 +1531,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         'Nuevos / Prueba' => w.needsAttention,
         'Activos permanentes' =>
           !w.isDeleted && w.status == 'Activo' && w.plan == 'Acceso permanente',
-        'Suspendidos' => !w.isDeleted && w.status == 'Suspendido',
+        'Desactivados' => !w.isDeleted && w.status == 'Suspendido',
         _ => !w.isDeleted,
       };
       return matchText && matchFilter;
@@ -1541,7 +1544,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   IconData _filterIcon(String value) => switch (value) {
     'Nuevos / Prueba' => Icons.fiber_new_rounded,
     'Activos permanentes' => Icons.verified_outlined,
-    'Suspendidos' => Icons.pause_circle_outline_rounded,
+    'Desactivados' => Icons.pause_circle_outline_rounded,
     _ => Icons.apps_rounded,
   };
 
@@ -2099,7 +2102,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                         borderRadius: BorderRadius.circular(18),
                       ),
                       child: Text(
-                        workshop.status,
+                        _displayWorkshopStatus(workshop.status),
                         style: TextStyle(
                           color: statusColor,
                           fontSize: 12,
@@ -2322,7 +2325,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               const Divider(color: _border),
               _InfoRow(Icons.workspace_premium_outlined, 'Plan', workshop.plan),
               const Divider(color: _border),
-              _InfoRow(Icons.circle_outlined, 'Estado', workshop.status),
+              _InfoRow(
+                Icons.circle_outlined,
+                'Estado',
+                _displayWorkshopStatus(workshop.status),
+              ),
               if (workshop.trialEndsAt != null) ...[
                 const Divider(color: _border),
                 _InfoRow(
@@ -4598,7 +4605,7 @@ class _WorkshopCommandSummary extends StatelessWidget {
         _warning,
       ),
       _item('Activos permanentes', active, Icons.verified_outlined, _success),
-      _item('Suspendidos', suspended, Icons.block_outlined, _danger),
+      _item('Desactivados', suspended, Icons.block_outlined, _danger),
       _item('Eliminados', deleted, Icons.delete_outline_rounded, _muted),
     ],
   );
@@ -4712,7 +4719,7 @@ class _WorkshopRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              workshop.status,
+              _displayWorkshopStatus(workshop.status),
               style: TextStyle(
                 color: color,
                 fontSize: 12,
