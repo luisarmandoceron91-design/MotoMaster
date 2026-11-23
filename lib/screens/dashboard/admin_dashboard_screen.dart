@@ -6012,7 +6012,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                           child: const Text('Cancelar'),
                         ),
                         FilledButton(
-                          onPressed: () {
+                          onPressed: () async {
                             final salePrice = int.tryParse(price.text.trim()) ?? 0;
                             final units = int.tryParse(stock.text.trim());
                             if (name.text.trim().isEmpty ||
@@ -6023,6 +6023,18 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                               setDialogState(() => productValidation =
                                   'Revisa los campos obligatorios: nombre, marca, precio de venta y unidades disponibles.');
                               return;
+                            }
+                            final normalizedBarcode = barcode.text.trim();
+                            if (normalizedBarcode.isNotEmpty) {
+                              final duplicate = await _store.findByBarcode(
+                                widget.workshopId,
+                                normalizedBarcode,
+                              );
+                              if (duplicate != null && duplicate.id != current?.id) {
+                                setDialogState(() => productValidation =
+                                    'El código de barras ya pertenece a ${duplicate.name}. Corrígelo antes de guardar.');
+                                return;
+                              }
                             }
                             Navigator.pop(context, true);
                           },
