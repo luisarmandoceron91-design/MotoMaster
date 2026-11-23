@@ -62,8 +62,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   }
 
   String get _suspendedMessage =>
-      'Este taller está cerrado temporalmente. Comunícate con el desarrollador '
-      'de la aplicación para solicitar la activación: $_ownerContact.';
+      'Taller desactivado. Comunícate con el desarrollador del software '
+      'para solicitar la activación: $_ownerContact.';
 
   @override
   void initState() {

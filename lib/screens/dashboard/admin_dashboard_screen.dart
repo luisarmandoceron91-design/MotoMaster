@@ -9,6 +9,8 @@ import 'package:printing/printing.dart';
 
 import '../../core/auth/admin_access_service.dart';
 import '../../core/auth/admin_auth_controller.dart';
+import '../../core/auth/auth_service.dart';
+import '../../core/access/workshop_deactivation_notice.dart';
 import '../../core/branding/workshop_brand.dart';
 import '../../core/branding/workshop_dashboard_preferences.dart';
 import '../../core/chat/chat_repository.dart';
@@ -56,6 +58,7 @@ class AdminDashboardScreen extends StatelessWidget {
         store: localAdminStore,
         brand: brand,
         tenantContext: tenantContext,
+        onDeactivated: () => _signOut(context),
         child: _DashboardScaffold(
           brand: brand,
           brandController: brandController,
@@ -93,6 +96,7 @@ class AdminDashboardScreen extends StatelessWidget {
   }
 
   Future<void> _signOut(BuildContext context) async {
+    await AuthService().signOut();
     await localAdminStore?.signOut();
     await tenantContext.clear();
     brandController.value = WorkshopBrand.defaultBrand;
@@ -115,12 +119,14 @@ class _TrialAccessGate extends StatefulWidget {
     required this.store,
     required this.brand,
     required this.tenantContext,
+    required this.onDeactivated,
     required this.child,
   });
 
   final LocalWorkshopAdminStore? store;
   final WorkshopBrand brand;
   final TenantContext tenantContext;
+  final Future<void> Function() onDeactivated;
   final Widget child;
 
   @override
@@ -132,12 +138,13 @@ class _TrialAccessGateState extends State<_TrialAccessGate> {
   LocalWorkshopAdminAccount? _account;
   AdminAccessRole? _cloudAccessRole;
   Timer? _timer;
+  bool _showingDeactivation = false;
 
   @override
   void initState() {
     super.initState();
     _refresh();
-    _timer = Timer.periodic(const Duration(seconds: 20), (_) => _refresh());
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _refresh());
   }
 
   @override
@@ -150,13 +157,28 @@ class _TrialAccessGateState extends State<_TrialAccessGate> {
     if (widget.store != null) {
       final account = await widget.store!.loadAccount();
       if (mounted) setState(() => _account = account);
+      if (account?.accessState == WorkshopAccessState.suspended) {
+        _announceDeactivation();
+      }
       return;
     }
     try {
       final role = await AdminAccessService().resolveRole();
       if (mounted) setState(() => _cloudAccessRole = role);
+      if (role == AdminAccessRole.workshopSuspended) {
+        _announceDeactivation();
+      }
     } catch (_) {
       // Una falla temporal de red no debe reemplazar el último estado validado.
+    }
+  }
+
+  Future<void> _announceDeactivation() async {
+    if (_showingDeactivation || !mounted) return;
+    _showingDeactivation = true;
+    final finished = await showWorkshopDeactivationNotice(context);
+    if (finished && mounted) {
+      await widget.onDeactivated();
     }
   }
 
@@ -171,6 +193,12 @@ class _TrialAccessGateState extends State<_TrialAccessGate> {
         _cloudAccessRole == AdminAccessRole.workshopExpired;
     final localBlocked = account != null && !account.canEnter;
     if (!cloudSuspended && !cloudExpired && !localBlocked) {
+      return widget.child;
+    }
+    // El aviso mantiene la pantalla actual visible durante 30 segundos. Al
+    // terminar se cierra la sesión y se elimina toda la pila de navegación.
+    if (cloudSuspended ||
+        account?.accessState == WorkshopAccessState.suspended) {
       return widget.child;
     }
     final suspended =
@@ -450,11 +478,17 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: Icon(nextOpen ? Icons.storefront_rounded : Icons.storefront_outlined),
-        title: Text(nextOpen ? '¿Abrir taller al público?' : '¿Cerrar taller al público?'),
-        content: Text(nextOpen
-            ? 'Los clientes volverán a encontrar el taller y podrán solicitar servicios.'
-            : 'Los clientes dejarán de encontrarlo temporalmente. No se borrarán citas, ventas, inventario ni chats.'),
+        icon: Icon(
+          nextOpen ? Icons.storefront_rounded : Icons.storefront_outlined,
+        ),
+        title: Text(
+          nextOpen ? '¿Abrir taller al público?' : '¿Cerrar taller al público?',
+        ),
+        content: Text(
+          nextOpen
+              ? 'Los clientes volverán a encontrar el taller y podrán solicitar servicios.'
+              : 'Los clientes dejarán de encontrarlo temporalmente. No se borrarán citas, ventas, inventario ni chats.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -476,12 +510,20 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
       if (!mounted) return;
       setState(() => _workshopOpen = nextOpen);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(nextOpen ? 'Taller abierto al público.' : 'Taller cerrado al público.')),
+        SnackBar(
+          content: Text(
+            nextOpen
+                ? 'Taller abierto al público.'
+                : 'Taller cerrado al público.',
+          ),
+        ),
       );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudo cambiar el estado del taller.')),
+        const SnackBar(
+          content: Text('No se pudo cambiar el estado del taller.'),
+        ),
       );
     }
   }
@@ -549,198 +591,203 @@ class _DashboardScaffoldState extends State<_DashboardScaffold> {
       child: MediaQuery(
         data: media,
         child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF151619),
-          automaticallyImplyLeading: false,
-          // Los módulos del taller no son rutas externas: esta flecha siempre
-          // devuelve al resumen del mismo taller.
-          leading: _selected == 0
-              ? null
-              : IconButton(
-                  tooltip: 'Volver al resumen del taller',
-                  onPressed: () => setState(() {
-                    _selected = 0;
-                    _pendingChatConversationId = null;
-                  }),
-                  icon: const Icon(Icons.arrow_back_rounded),
-                ),
-          title: Row(
-            children: [
-              SizedBox.square(
-                dimension: 36,
-                child: brand.hasCustomLogo
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.memory(
-                          brand.customLogoBytes!,
-                          fit: BoxFit.cover,
-                        ),
-                      )
-                    : DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: brand.accentColor.withValues(alpha: .15),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(brand.logoIcon, color: brand.accentColor),
-                      ),
-              ),
-              const SizedBox(width: 10),
-              Flexible(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      brand.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    const Text(
-                      'Centro operativo',
-                      style: TextStyle(color: Color(0xFF9EA3AA), fontSize: 10),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            IconButton(
-              tooltip: 'Actualizar datos desde la nube',
-              onPressed: _refreshing ? null : _refreshFromCloud,
-              icon: _refreshing
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.refresh_rounded),
-            ),
-            AppNotificationsButton(
-              color: brand.accentColor,
-              onOpen: (notification) {
-                final type = notification['type']?.toString() ?? '';
-                setState(() {
-                  if (type == 'chat_message') {
-                    _selected = 2;
-                    _pendingChatConversationId = notification['reference_id']
-                        ?.toString();
-                  } else if (type.contains('appointment') ||
-                      type.contains('cita')) {
-                    _selected = 1;
-                  } else if (type.contains('rating') ||
-                      type.contains('calificacion')) {
-                    _selected = 8;
-                  } else if (type.contains('sale') ||
-                      type.contains('product')) {
-                    _selected = 6;
-                  }
-                });
-              },
-            ),
-            IconButton(
-              tooltip: 'Personalización del taller',
-              onPressed: _openPersonalization,
-              icon: const Icon(Icons.palette_outlined),
-            ),
-            IconButton(
-              tooltip: 'Configuración de acceso',
-              onPressed: _openAccessSettings,
-              icon: const Icon(Icons.settings_outlined),
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'Cuenta del administrador',
-              icon: const Icon(Icons.account_circle_outlined),
-              onSelected: (value) {
-                if (value == 'logout') _confirmLogout();
-                if (value == 'availability') _toggleWorkshopAvailability();
-              },
-              itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: 'availability',
-                  child: ListTile(
-                    leading: Icon(
-                      _workshopOpen
-                          ? Icons.storefront_outlined
-                          : Icons.storefront_rounded,
-                    ),
-                    title: Text(
-                      _workshopOpen ? 'Cerrar taller al público' : 'Abrir taller al público',
-                    ),
+          appBar: AppBar(
+            backgroundColor: const Color(0xFF151619),
+            automaticallyImplyLeading: false,
+            // Los módulos del taller no son rutas externas: esta flecha siempre
+            // devuelve al resumen del mismo taller.
+            leading: _selected == 0
+                ? null
+                : IconButton(
+                    tooltip: 'Volver al resumen del taller',
+                    onPressed: () => setState(() {
+                      _selected = 0;
+                      _pendingChatConversationId = null;
+                    }),
+                    icon: const Icon(Icons.arrow_back_rounded),
                   ),
+            title: Row(
+              children: [
+                SizedBox.square(
+                  dimension: 36,
+                  child: brand.hasCustomLogo
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.memory(
+                            brand.customLogoBytes!,
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                      : DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: brand.accentColor.withValues(alpha: .15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(brand.logoIcon, color: brand.accentColor),
+                        ),
                 ),
-                PopupMenuItem(
-                  value: 'logout',
-                  child: ListTile(
-                    leading: Icon(Icons.logout_rounded),
-                    title: Text('Cerrar sesión'),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        brand.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      const Text(
+                        'Centro operativo',
+                        style: TextStyle(
+                          color: Color(0xFF9EA3AA),
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(width: 8),
-          ],
-        ),
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            Opacity(
-              opacity: .34,
-              child: Image.asset(
-                'assets/images/workshop_login_background_v1.png',
-                fit: BoxFit.cover,
+            actions: [
+              IconButton(
+                tooltip: 'Actualizar datos desde la nube',
+                onPressed: _refreshing ? null : _refreshFromCloud,
+                icon: _refreshing
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh_rounded),
               ),
-            ),
-            const ColoredBox(color: Color(0xAA080A0D)),
-            if (_preferences.brightness < 1)
-              ColoredBox(
-                color: Colors.black.withValues(
-                  // El rango anterior apenas se percibía en el fondo oscuro.
-                  alpha: ((1 - _preferences.brightness) * 1.55).clamp(0, .42),
-                ),
-              )
-            else if (_preferences.brightness > 1)
-              ColoredBox(
-                color: Colors.white.withValues(
-                  alpha: ((_preferences.brightness - 1) * .72).clamp(0, .14),
-                ),
-              ),
-            SafeArea(
-              top: false,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final desktop = constraints.maxWidth >= 980;
-                  return Row(
-                    children: [
-                      if (desktop)
-                        _WorkshopNavigation(
-                          brand: brand,
-                          selected: _selected,
-                          sections: _sections,
-                          onSelected: (index) =>
-                              setState(() => _selected = index),
-                        ),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            if (!desktop)
-                              _CompactWorkshopNavigation(
-                                brand: brand,
-                                selected: _selected,
-                                sections: _sections,
-                                onSelected: (index) =>
-                                    setState(() => _selected = index),
-                              ),
-                            Expanded(child: _selectedPage()),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
+              AppNotificationsButton(
+                color: brand.accentColor,
+                onOpen: (notification) {
+                  final type = notification['type']?.toString() ?? '';
+                  setState(() {
+                    if (type == 'chat_message') {
+                      _selected = 2;
+                      _pendingChatConversationId = notification['reference_id']
+                          ?.toString();
+                    } else if (type.contains('appointment') ||
+                        type.contains('cita')) {
+                      _selected = 1;
+                    } else if (type.contains('rating') ||
+                        type.contains('calificacion')) {
+                      _selected = 8;
+                    } else if (type.contains('sale') ||
+                        type.contains('product')) {
+                      _selected = 6;
+                    }
+                  });
                 },
               ),
-            ),
-          ],
-        ),
+              IconButton(
+                tooltip: 'Personalización del taller',
+                onPressed: _openPersonalization,
+                icon: const Icon(Icons.palette_outlined),
+              ),
+              IconButton(
+                tooltip: 'Configuración de acceso',
+                onPressed: _openAccessSettings,
+                icon: const Icon(Icons.settings_outlined),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Cuenta del administrador',
+                icon: const Icon(Icons.account_circle_outlined),
+                onSelected: (value) {
+                  if (value == 'logout') _confirmLogout();
+                  if (value == 'availability') _toggleWorkshopAvailability();
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: 'availability',
+                    child: ListTile(
+                      leading: Icon(
+                        _workshopOpen
+                            ? Icons.storefront_outlined
+                            : Icons.storefront_rounded,
+                      ),
+                      title: Text(
+                        _workshopOpen
+                            ? 'Cerrar taller al público'
+                            : 'Abrir taller al público',
+                      ),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'logout',
+                    child: ListTile(
+                      leading: Icon(Icons.logout_rounded),
+                      title: Text('Cerrar sesión'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              Opacity(
+                opacity: .34,
+                child: Image.asset(
+                  'assets/images/workshop_login_background_v1.png',
+                  fit: BoxFit.cover,
+                ),
+              ),
+              const ColoredBox(color: Color(0xAA080A0D)),
+              if (_preferences.brightness < 1)
+                ColoredBox(
+                  color: Colors.black.withValues(
+                    // El rango anterior apenas se percibía en el fondo oscuro.
+                    alpha: ((1 - _preferences.brightness) * 1.55).clamp(0, .42),
+                  ),
+                )
+              else if (_preferences.brightness > 1)
+                ColoredBox(
+                  color: Colors.white.withValues(
+                    alpha: ((_preferences.brightness - 1) * .72).clamp(0, .14),
+                  ),
+                ),
+              SafeArea(
+                top: false,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final desktop = constraints.maxWidth >= 980;
+                    return Row(
+                      children: [
+                        if (desktop)
+                          _WorkshopNavigation(
+                            brand: brand,
+                            selected: _selected,
+                            sections: _sections,
+                            onSelected: (index) =>
+                                setState(() => _selected = index),
+                          ),
+                        Expanded(
+                          child: Column(
+                            children: [
+                              if (!desktop)
+                                _CompactWorkshopNavigation(
+                                  brand: brand,
+                                  selected: _selected,
+                                  sections: _sections,
+                                  onSelected: (index) =>
+                                      setState(() => _selected = index),
+                                ),
+                              Expanded(child: _selectedPage()),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1875,7 +1922,10 @@ class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
                           children: [
                             FilledButton.icon(
                               onPressed: () async {
-                                await _store.decideAppointment(item, accept: true);
+                                await _store.decideAppointment(
+                                  item,
+                                  accept: true,
+                                );
                                 await _load();
                               },
                               icon: const Icon(Icons.check_circle_outline),
@@ -1883,7 +1933,10 @@ class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
                             ),
                             OutlinedButton.icon(
                               onPressed: () async {
-                                await _store.decideAppointment(item, accept: false);
+                                await _store.decideAppointment(
+                                  item,
+                                  accept: false,
+                                );
                                 await _load();
                               },
                               icon: const Icon(Icons.cancel_outlined),
@@ -2061,15 +2114,16 @@ class _WorkshopMechanicsPanelState extends State<_WorkshopMechanicsPanel> {
 
   Widget _mechanicRow(WorkshopMechanic mechanic) {
     final rating = _ratingFor(mechanic.name);
-    final upcoming = _appointments
-        .where(
-          (item) =>
-              item.mechanicName.trim().toLowerCase() ==
-                  mechanic.name.trim().toLowerCase() &&
-              item.startsAt.isAfter(DateTime.now()),
-        )
-        .toList()
-      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+    final upcoming =
+        _appointments
+            .where(
+              (item) =>
+                  item.mechanicName.trim().toLowerCase() ==
+                      mechanic.name.trim().toLowerCase() &&
+                  item.startsAt.isAfter(DateTime.now()),
+            )
+            .toList()
+          ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
       leading: _mechanicAvatar(mechanic, 52),
@@ -2438,18 +2492,25 @@ class _WorkshopMechanicsPanelState extends State<_WorkshopMechanicsPanel> {
                 final years = int.tryParse(experience.text.trim());
                 final digits = phone.text.replaceAll(RegExp(r'[^0-9]'), '');
                 if (name.text.trim().length < 3) {
-                  setDialog(() => validationMessage =
-                      'Escribe el nombre completo del mecánico.');
+                  setDialog(
+                    () => validationMessage =
+                        'Escribe el nombre completo del mecánico.',
+                  );
                   return;
                 }
                 if (years == null || years < 0 || years > 80) {
-                  setDialog(() => validationMessage =
-                      'Los años de experiencia deben estar entre 0 y 80.');
+                  setDialog(
+                    () => validationMessage =
+                        'Los años de experiencia deben estar entre 0 y 80.',
+                  );
                   return;
                 }
-                if (digits.isNotEmpty && (digits.length < 7 || digits.length > 15)) {
-                  setDialog(() => validationMessage =
-                      'El celular debe tener entre 7 y 15 números.');
+                if (digits.isNotEmpty &&
+                    (digits.length < 7 || digits.length > 15)) {
+                  setDialog(
+                    () => validationMessage =
+                        'El celular debe tener entre 7 y 15 números.',
+                  );
                   return;
                 }
                 Navigator.pop(context, true);
@@ -4862,10 +4923,11 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: (product.stock > 0
-                              ? const Color(0xFF39D98A)
-                              : const Color(0xFFFF6B72))
-                          .withValues(alpha: .14),
+                      color:
+                          (product.stock > 0
+                                  ? const Color(0xFF39D98A)
+                                  : const Color(0xFFFF6B72))
+                              .withValues(alpha: .14),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -6013,15 +6075,18 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                         ),
                         FilledButton(
                           onPressed: () async {
-                            final salePrice = int.tryParse(price.text.trim()) ?? 0;
+                            final salePrice =
+                                int.tryParse(price.text.trim()) ?? 0;
                             final units = int.tryParse(stock.text.trim());
                             if (name.text.trim().isEmpty ||
                                 brand.text.trim().isEmpty ||
                                 salePrice <= 0 ||
                                 units == null ||
                                 units < 0) {
-                              setDialogState(() => productValidation =
-                                  'Revisa los campos obligatorios: nombre, marca, precio de venta y unidades disponibles.');
+                              setDialogState(
+                                () => productValidation =
+                                    'Revisa los campos obligatorios: nombre, marca, precio de venta y unidades disponibles.',
+                              );
                               return;
                             }
                             final normalizedBarcode = barcode.text.trim();
@@ -6030,9 +6095,12 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                                 widget.workshopId,
                                 normalizedBarcode,
                               );
-                              if (duplicate != null && duplicate.id != current?.id) {
-                                setDialogState(() => productValidation =
-                                    'El código de barras ya pertenece a ${duplicate.name}. Corrígelo antes de guardar.');
+                              if (duplicate != null &&
+                                  duplicate.id != current?.id) {
+                                setDialogState(
+                                  () => productValidation =
+                                      'El código de barras ya pertenece a ${duplicate.name}. Corrígelo antes de guardar.',
+                                );
                                 return;
                               }
                             }

@@ -8,6 +8,7 @@ import 'package:printing/printing.dart';
 
 import '../../core/auth/admin_auth_controller.dart';
 import '../../core/auth/auth_service.dart';
+import '../../core/access/workshop_deactivation_notice.dart';
 import '../../core/branding/workshop_brand.dart';
 import '../../core/chat/chat_repository.dart';
 import '../../core/chat/chat_attachment_actions.dart';
@@ -26,6 +27,7 @@ import '../../core/notifications/app_notifications.dart';
 import '../../core/staff/workshop_mechanic_store.dart';
 import '../../core/tenant/tenant_context.dart';
 import '../../core/workshops/workshop.dart';
+import '../../core/workshops/workshop_repository.dart';
 import '../access/role_access_screen.dart';
 import '../../core/workshops/workshop_feedback_store.dart';
 import '../auth/account_recovery_screen.dart';
@@ -3486,6 +3488,8 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
   var _loading = true;
   var _refreshing = false;
   var _refreshToken = 0;
+  Timer? _availabilityTimer;
+  bool _showingDeactivation = false;
 
   String get _clientId =>
       _profile.userId?.isNotEmpty == true ? _profile.userId! : _profile.email;
@@ -3513,12 +3517,40 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
     _profile = widget.profile;
     ClientServiceStore.revision.addListener(_reload);
     _reload();
+    _checkWorkshopAvailability();
+    _availabilityTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _checkWorkshopAvailability(),
+    );
   }
 
   @override
   void dispose() {
     ClientServiceStore.revision.removeListener(_reload);
+    _availabilityTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _checkWorkshopAvailability() async {
+    if (_showingDeactivation || !ApiClient.cloudEnabled) return;
+    try {
+      final available = await WorkshopRepository().isAvailableForClients(
+        widget.workshop.id,
+      );
+      if (!available && mounted) {
+        _showingDeactivation = true;
+        final finished = await showWorkshopDeactivationNotice(
+          context,
+          supportEmail: widget.authController.email.trim().isEmpty
+              ? 'luisarmandoceron91@gmail.com'
+              : widget.authController.email.trim(),
+          supportPhone: widget.authController.phone,
+        );
+        if (finished && mounted) await _signOut();
+      }
+    } catch (_) {
+      // Una falla de red no debe expulsar a una persona de su taller.
+    }
   }
 
   Future<void> _reload() async {
@@ -3580,235 +3612,236 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF090A0B),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF15171A),
-        surfaceTintColor: Colors.transparent,
-        automaticallyImplyLeading: false,
-        // Las secciones son parte del mismo taller. Volver desde Chat, Citas,
-        // Mis motos o Repuestos debe llevar al inicio del dashboard, no sacar
-        // al cliente a la lista de talleres.
-        leading: _tab == 0
-            ? null
-            : IconButton(
-                tooltip: 'Volver al inicio del taller',
-                onPressed: () => setState(() {
-                  _tab = 0;
-                  _productQuestion = null;
-                }),
-                icon: const Icon(Icons.arrow_back_rounded),
-              ),
-        titleSpacing: 0,
-        title: Row(
-          children: [
-            _Logo(workshop: widget.workshop, brand: widget.brand, size: 38),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.workshop.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF15171A),
+          surfaceTintColor: Colors.transparent,
+          automaticallyImplyLeading: false,
+          // Las secciones son parte del mismo taller. Volver desde Chat, Citas,
+          // Mis motos o Repuestos debe llevar al inicio del dashboard, no sacar
+          // al cliente a la lista de talleres.
+          leading: _tab == 0
+              ? null
+              : IconButton(
+                  tooltip: 'Volver al inicio del taller',
+                  onPressed: () => setState(() {
+                    _tab = 0;
+                    _productQuestion = null;
+                  }),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+          titleSpacing: 0,
+          title: Row(
+            children: [
+              _Logo(workshop: widget.workshop, brand: widget.brand, size: 38),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.workshop.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
-                  ),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.circle,
-                        size: 8,
-                        color: widget.workshop.isOpenNow
-                            ? const Color(0xFF31DB75)
-                            : const Color(0xFFFFB84D),
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        widget.workshop.isOpenNow
-                            ? 'Abierto ahora'
-                            : 'Fuera de horario',
-                        style: const TextStyle(
-                          color: Color(0xFFB4B9C0),
-                          fontSize: 10,
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.circle,
+                          size: 8,
+                          color: widget.workshop.isOpenNow
+                              ? const Color(0xFF31DB75)
+                              : const Color(0xFFFFB84D),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Actualizar datos desde la nube',
-            onPressed: _refreshing ? null : _refreshFromCloud,
-            icon: _refreshing
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh_rounded),
-          ),
-          AppNotificationsButton(
-            color: widget.brand.accentColor,
-            onOpen: (notification) {
-              final type = notification['type']?.toString() ?? '';
-              setState(() {
-                if (type == 'chat_message') {
-                  _tab = 4;
-                } else if (type.contains('appointment') ||
-                    type.contains('cita')) {
-                  _tab = 1;
-                } else if (type.contains('product') || type.contains('sale')) {
-                  _tab = 3;
-                }
-              });
-            },
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Cuenta',
-            icon: _headerProfileAvatar(),
-            onSelected: (value) {
-              if (value == 'profile') _openSettings();
-              if (value == 'recovery') _openRecovery();
-              if (value == 'logout') _confirmSignOut();
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: 'profile',
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.manage_accounts_outlined),
-                  title: Text('Perfil y configuración'),
-                  subtitle: Text('Foto, datos, correo y celular'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'recovery',
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.lock_reset_rounded),
-                  title: Text('Seguridad y recuperación'),
-                  subtitle: Text('Recupera el acceso a tu cuenta'),
-                ),
-              ),
-              PopupMenuDivider(),
-              PopupMenuItem(
-                value: 'logout',
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.logout_rounded),
-                  title: Text('Cerrar sesión'),
+                        const SizedBox(width: 5),
+                        Text(
+                          widget.workshop.isOpenNow
+                              ? 'Abierto ahora'
+                              : 'Fuera de horario',
+                          style: const TextStyle(
+                            color: Color(0xFFB4B9C0),
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-        ],
-      ),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          Opacity(
-            opacity: .52,
-            child: Image.asset(
-              'assets/images/workshop_login_background_v1.png',
-              fit: BoxFit.cover,
+          actions: [
+            IconButton(
+              tooltip: 'Actualizar datos desde la nube',
+              onPressed: _refreshing ? null : _refreshFromCloud,
+              icon: _refreshing
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh_rounded),
             ),
-          ),
-          const ColoredBox(color: Color(0xA808090A)),
-          if (_loading)
-            Center(child: CircularProgressIndicator(color: accent))
-          else
-            KeyedSubtree(
-              key: ValueKey('client-cloud-refresh-$_refreshToken'),
-              child: IndexedStack(
-                index: _tab,
-                children: [
-                  _home(),
-                  _appointmentsPage(),
-                  _motorcyclesPage(),
-                  _PartsPage(
-                    accent: accent,
-                    workshop: widget.workshop,
-                    clientId: _clientId,
-                    clientName: _profile.fullName,
-                    onOpenSupport: (product) => setState(() {
-                      _productQuestion = product;
-                      _tab = 4;
-                    }),
+            AppNotificationsButton(
+              color: widget.brand.accentColor,
+              onOpen: (notification) {
+                final type = notification['type']?.toString() ?? '';
+                setState(() {
+                  if (type == 'chat_message') {
+                    _tab = 4;
+                  } else if (type.contains('appointment') ||
+                      type.contains('cita')) {
+                    _tab = 1;
+                  } else if (type.contains('product') ||
+                      type.contains('sale')) {
+                    _tab = 3;
+                  }
+                });
+              },
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Cuenta',
+              icon: _headerProfileAvatar(),
+              onSelected: (value) {
+                if (value == 'profile') _openSettings();
+                if (value == 'recovery') _openRecovery();
+                if (value == 'logout') _confirmSignOut();
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'profile',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.manage_accounts_outlined),
+                    title: Text('Perfil y configuración'),
+                    subtitle: Text('Foto, datos, correo y celular'),
                   ),
-                  _SupportPage(
-                    workshop: widget.workshop,
-                    accent: accent,
-                    profile: _profile,
-                    productQuestion: _productQuestion,
+                ),
+                PopupMenuItem(
+                  value: 'recovery',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.lock_reset_rounded),
+                    title: Text('Seguridad y recuperación'),
+                    subtitle: Text('Recupera el acceso a tu cuenta'),
                   ),
-                ],
-              ),
-            ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBarTheme(
-        data: NavigationBarThemeData(
-          indicatorColor: Colors.transparent,
-          iconTheme: WidgetStateProperty.resolveWith(
-            (states) => IconThemeData(
-              color: states.contains(WidgetState.selected)
-                  ? accent
-                  : const Color(0xFFE2E5E8),
-            ),
-          ),
-          labelTextStyle: WidgetStateProperty.resolveWith(
-            (states) => TextStyle(
-              color: states.contains(WidgetState.selected)
-                  ? accent
-                  : const Color(0xFFE2E5E8),
-              fontSize: 11,
-              fontWeight: states.contains(WidgetState.selected)
-                  ? FontWeight.w800
-                  : FontWeight.w500,
-            ),
-          ),
-        ),
-        child: NavigationBar(
-          height: 72,
-          selectedIndex: _tab,
-          backgroundColor: const Color(0xFF17191C),
-          onDestinationSelected: (value) => setState(() => _tab = value),
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home_rounded),
-              label: 'Inicio',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.calendar_month_outlined),
-              selectedIcon: Icon(Icons.calendar_month_rounded),
-              label: 'Citas',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.two_wheeler_outlined),
-              selectedIcon: Icon(Icons.two_wheeler_rounded),
-              label: 'Mi moto',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.inventory_2_outlined),
-              selectedIcon: Icon(Icons.inventory_2_rounded),
-              label: 'Repuestos',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline_rounded),
-              selectedIcon: Icon(Icons.chat_bubble_rounded),
-              label: 'Soporte',
+                ),
+                PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'logout',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.logout_rounded),
+                    title: Text('Cerrar sesión'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            Opacity(
+              opacity: .52,
+              child: Image.asset(
+                'assets/images/workshop_login_background_v1.png',
+                fit: BoxFit.cover,
+              ),
+            ),
+            const ColoredBox(color: Color(0xA808090A)),
+            if (_loading)
+              Center(child: CircularProgressIndicator(color: accent))
+            else
+              KeyedSubtree(
+                key: ValueKey('client-cloud-refresh-$_refreshToken'),
+                child: IndexedStack(
+                  index: _tab,
+                  children: [
+                    _home(),
+                    _appointmentsPage(),
+                    _motorcyclesPage(),
+                    _PartsPage(
+                      accent: accent,
+                      workshop: widget.workshop,
+                      clientId: _clientId,
+                      clientName: _profile.fullName,
+                      onOpenSupport: (product) => setState(() {
+                        _productQuestion = product;
+                        _tab = 4;
+                      }),
+                    ),
+                    _SupportPage(
+                      workshop: widget.workshop,
+                      accent: accent,
+                      profile: _profile,
+                      productQuestion: _productQuestion,
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        bottomNavigationBar: NavigationBarTheme(
+          data: NavigationBarThemeData(
+            indicatorColor: Colors.transparent,
+            iconTheme: WidgetStateProperty.resolveWith(
+              (states) => IconThemeData(
+                color: states.contains(WidgetState.selected)
+                    ? accent
+                    : const Color(0xFFE2E5E8),
+              ),
+            ),
+            labelTextStyle: WidgetStateProperty.resolveWith(
+              (states) => TextStyle(
+                color: states.contains(WidgetState.selected)
+                    ? accent
+                    : const Color(0xFFE2E5E8),
+                fontSize: 11,
+                fontWeight: states.contains(WidgetState.selected)
+                    ? FontWeight.w800
+                    : FontWeight.w500,
+              ),
+            ),
+          ),
+          child: NavigationBar(
+            height: 72,
+            selectedIndex: _tab,
+            backgroundColor: const Color(0xFF17191C),
+            onDestinationSelected: (value) => setState(() => _tab = value),
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home_rounded),
+                label: 'Inicio',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.calendar_month_outlined),
+                selectedIcon: Icon(Icons.calendar_month_rounded),
+                label: 'Citas',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.two_wheeler_outlined),
+                selectedIcon: Icon(Icons.two_wheeler_rounded),
+                label: 'Mi moto',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.inventory_2_outlined),
+                selectedIcon: Icon(Icons.inventory_2_rounded),
+                label: 'Repuestos',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.chat_bubble_outline_rounded),
+                selectedIcon: Icon(Icons.chat_bubble_rounded),
+                label: 'Soporte',
+              ),
+            ],
+          ),
         ),
       ),
     );

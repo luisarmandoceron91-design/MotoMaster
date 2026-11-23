@@ -659,9 +659,8 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                             ? null
                             : IconButton(
                                 tooltip: 'Volver al resumen',
-                                onPressed: () => setState(
-                                  () => _section = _Section.summary,
-                                ),
+                                onPressed: () =>
+                                    setState(() => _section = _Section.summary),
                                 icon: const Icon(Icons.arrow_back_rounded),
                               ),
                         title: const Text(
@@ -2248,8 +2247,8 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                                 ),
                               actionButton(
                                 label: workshop.status == 'Suspendido'
-                                    ? 'Reactivar taller'
-                                    : 'Suspender taller',
+                                    ? 'Activar taller'
+                                    : 'Desactivar taller',
                                 icon: workshop.status == 'Suspendido'
                                     ? Icons.play_circle_outline
                                     : Icons.pause_circle_outline,
@@ -2543,7 +2542,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(
-          suspend ? 'Suspender ${workshop.name}' : 'Reactivar ${workshop.name}',
+          suspend ? 'Desactivar ${workshop.name}' : 'Activar ${workshop.name}',
         ),
         content: SizedBox(
           width: 460,
@@ -2553,8 +2552,8 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             children: [
               Text(
                 suspend
-                    ? 'Se impedirán nuevos accesos, pero toda la información permanecerá protegida.'
-                    : 'El administrador y su equipo recuperarán el acceso inmediatamente.',
+                    ? 'Se impedirán nuevos accesos y el taller desaparecerá para clientes. Toda la información permanecerá protegida.'
+                    : 'El administrador, sus clientes y su equipo recuperarán el acceso inmediatamente.',
               ),
               const SizedBox(height: 16),
               TextField(
@@ -2562,7 +2561,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 maxLines: 3,
                 decoration: InputDecoration(
                   labelText: suspend
-                      ? 'Motivo de la suspensión'
+                      ? 'Motivo de la desactivación'
                       : 'Observaciones',
                   hintText: 'La acción quedará registrada en auditoría.',
                 ),
@@ -2581,13 +2580,13 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 : null,
             onPressed: () {
               if (suspend && reason.text.trim().isEmpty) {
-                _toast('Escribe el motivo de la suspensión.');
+                _toast('Escribe el motivo de la desactivación.');
                 return;
               }
               Navigator.pop(dialogContext, true);
             },
             icon: Icon(suspend ? Icons.block : Icons.play_arrow),
-            label: Text(suspend ? 'Confirmar suspensión' : 'Reactivar taller'),
+            label: Text(suspend ? 'Confirmar desactivación' : 'Activar taller'),
           ),
         ],
       ),
@@ -2605,7 +2604,12 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               : changeReason,
         );
       } catch (error) {
-        _toast('No fue posible actualizar el taller en la nube.');
+        final detail = error.toString().toLowerCase();
+        _toast(
+          detail.contains('dos pasos') || detail.contains('mfa')
+              ? 'Para desactivar este taller, confirma primero la verificación en dos pasos de la cuenta propietaria.'
+              : 'No fue posible actualizar el taller en la nube. Revisa la conexión e inténtalo de nuevo.',
+        );
         return;
       }
     }
