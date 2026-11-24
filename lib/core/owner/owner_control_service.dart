@@ -185,6 +185,24 @@ class OwnerControlService {
         'change_reason': reason.trim(),
       },
     );
+
+    // No confirmamos el cambio hasta leer nuevamente el registro desde el
+    // servidor. Esto evita que el panel muestre un "Desactivado" local si la
+    // sesión no tenía permisos o la red no alcanzó a guardar la operación.
+    final workshops = await listWorkshops();
+    OwnerWorkshopRecord? updated;
+    for (final workshop in workshops) {
+      if (workshop.id == workshopId) {
+        updated = workshop;
+        break;
+      }
+    }
+    final expectedStatus = enabled ? 'active' : 'suspended';
+    if (updated == null || updated.status != expectedStatus) {
+      throw StateError(
+        'El servidor no confirmó el nuevo estado del taller. No se aplicó ningún cambio local.',
+      );
+    }
   }
 
   Future<void> setWorkshopAccess({

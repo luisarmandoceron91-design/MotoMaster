@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:printing/printing.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/admin_access_service.dart';
 import '../../core/auth/admin_auth_controller.dart';
@@ -138,6 +139,7 @@ class _TrialAccessGateState extends State<_TrialAccessGate> {
   LocalWorkshopAdminAccount? _account;
   AdminAccessRole? _cloudAccessRole;
   Timer? _timer;
+  RealtimeChannel? _availabilityChannel;
   bool _showingDeactivation = false;
   bool _workshopDeactivatedInCloud = false;
 
@@ -145,12 +147,35 @@ class _TrialAccessGateState extends State<_TrialAccessGate> {
   void initState() {
     super.initState();
     _refresh();
+    _listenForWorkshopAvailability();
     _timer = Timer.periodic(const Duration(seconds: 5), (_) => _refresh());
+  }
+
+  void _listenForWorkshopAvailability() {
+    final workshopId = widget.tenantContext.currentTenantId;
+    if (!ApiClient.cloudEnabled || workshopId.isEmpty) return;
+    _availabilityChannel = ApiClient().client
+        .channel('workshop-availability-admin-$workshopId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'workshops',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: workshopId,
+          ),
+          callback: (_) => _refresh(),
+        )
+        .subscribe();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    if (_availabilityChannel != null) {
+      ApiClient().client.removeChannel(_availabilityChannel!);
+    }
     super.dispose();
   }
 

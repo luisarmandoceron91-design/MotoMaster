@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:printing/printing.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/admin_auth_controller.dart';
 import '../../core/auth/auth_service.dart';
@@ -3489,6 +3490,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
   var _refreshing = false;
   var _refreshToken = 0;
   Timer? _availabilityTimer;
+  RealtimeChannel? _availabilityChannel;
   bool _showingDeactivation = false;
 
   String get _clientId =>
@@ -3518,6 +3520,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
     ClientServiceStore.revision.addListener(_reload);
     _reload();
     _checkWorkshopAvailability();
+    _listenForWorkshopAvailability();
     _availabilityTimer = Timer.periodic(
       const Duration(seconds: 5),
       (_) => _checkWorkshopAvailability(),
@@ -3528,7 +3531,28 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
   void dispose() {
     ClientServiceStore.revision.removeListener(_reload);
     _availabilityTimer?.cancel();
+    if (_availabilityChannel != null) {
+      ApiClient().client.removeChannel(_availabilityChannel!);
+    }
     super.dispose();
+  }
+
+  void _listenForWorkshopAvailability() {
+    if (!ApiClient.cloudEnabled || widget.workshop.id.isEmpty) return;
+    _availabilityChannel = ApiClient().client
+        .channel('workshop-availability-client-${widget.workshop.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'workshops',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: widget.workshop.id,
+          ),
+          callback: (_) => _checkWorkshopAvailability(),
+        )
+        .subscribe();
   }
 
   Future<void> _checkWorkshopAvailability() async {

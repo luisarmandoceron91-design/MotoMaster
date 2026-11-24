@@ -2614,33 +2614,29 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     final changeReason = reason.text.trim();
     reason.dispose();
     if (confirmed != true) return;
-    if (_usingCloudData && !workshop.isLocalRecord && workshop.id != null) {
-      try {
-        await _ownerService.setWorkshopAvailability(
-          workshopId: workshop.id!,
-          enabled: !suspend,
-          reason: changeReason.isEmpty
-              ? 'Reactivación autorizada'
-              : changeReason,
-        );
-      } catch (error) {
-        final detail = error.toString().toLowerCase();
-        _toast(
-          detail.contains('dos pasos') || detail.contains('mfa')
-              ? 'Para desactivar este taller, confirma primero la verificación en dos pasos de la cuenta propietaria.'
-              : 'No fue posible actualizar el taller en la nube. Revisa la conexión e inténtalo de nuevo.',
-        );
-        return;
-      }
+    // El panel del propietario administra talleres de todas las cuentas. Por
+    // seguridad y coherencia entre dispositivos, esta acción nunca puede
+    // quedarse sólo en el almacenamiento del celular.
+    if (!_usingCloudData ||
+        !_ownerService.hasCloudSession ||
+        workshop.isLocalRecord ||
+        workshop.id == null) {
+      _toast(
+        'No se cambió el taller. Inicia el Centro de control con la cuenta propietaria conectada a la nube y actualiza los datos antes de intentarlo.',
+      );
+      return;
     }
-    if (workshop.id != null) {
-      await _mirrorWorkshopAvailability(workshop.id!, enabled: !suspend);
-      if (mounted) {
-        setState(() {
-          workshop.status = suspend ? 'Suspendido' : 'Activo';
-          if (!suspend) workshop.plan = 'Acceso permanente';
-        });
-      }
+    try {
+      await _ownerService.setWorkshopAvailability(
+        workshopId: workshop.id!,
+        enabled: !suspend,
+        reason: changeReason.isEmpty ? 'Reactivación autorizada' : changeReason,
+      );
+    } catch (_) {
+      _toast(
+        'El servidor no confirmó el cambio. El taller sigue igual; revisa la conexión de la cuenta propietaria y vuelve a actualizar.',
+      );
+      return;
     }
     await _loadCloudData(silent: true);
     if (!mounted) return;
@@ -3500,23 +3496,16 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           workshop.status == 'Activo' || workshop.status == 'Prueba';
       if (entry.value == wasEnabled || workshop.id == null) continue;
       try {
-        if (_usingCloudData && !workshop.isLocalRecord) {
-          await _ownerService.setWorkshopAvailability(
-            workshopId: workshop.id!,
-            enabled: entry.value,
-            reason: 'Cambio guardado desde administrar accesos',
-          );
-        } else {
-          final state = await _localAdminStore.setWorkshopAvailability(
-            tenantId: workshop.id!,
-            enabled: entry.value,
-          );
-          if (state == null) throw StateError('Taller local no encontrado');
-          await LocalWorkshopDirectoryStore().setAccessStatus(
-            workshop.id!,
-            state.name,
-          );
+        if (!_usingCloudData ||
+            !_ownerService.hasCloudSession ||
+            workshop.isLocalRecord) {
+          throw StateError('Sin sesión propietaria en la nube');
         }
+        await _ownerService.setWorkshopAvailability(
+          workshopId: workshop.id!,
+          enabled: entry.value,
+          reason: 'Cambio guardado desde administrar accesos',
+        );
       } catch (_) {
         failures++;
       }
