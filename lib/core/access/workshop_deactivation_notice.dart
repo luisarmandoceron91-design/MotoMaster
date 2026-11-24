@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 Future<bool> showWorkshopDeactivationNotice(
   BuildContext context, {
   String supportEmail = 'luisarmandoceron91@gmail.com',
-  String supportPhone = '',
+  String supportPhone = '3207539325',
   Future<bool> Function()? isStillDeactivated,
 }) async {
   var secondsRemaining = 30;

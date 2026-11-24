@@ -57,6 +57,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       widget.authController.publicContact.trim(),
       widget.authController.phone.trim(),
       widget.authController.email.trim(),
+      '3207539325',
+      'luisarmandoceron91@gmail.com',
     }..removeWhere((value) => value.isEmpty);
     return values.isEmpty ? 'contacto del desarrollador' : values.join(' · ');
   }

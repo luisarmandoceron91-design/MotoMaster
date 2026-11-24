@@ -12,6 +12,7 @@ import '../../core/auth/admin_access_service.dart';
 import '../../core/auth/admin_auth_controller.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/access/workshop_deactivation_notice.dart';
+import '../../core/access/developer_support_contact.dart';
 import '../../core/branding/workshop_brand.dart';
 import '../../core/branding/workshop_dashboard_preferences.dart';
 import '../../core/chat/chat_repository.dart';
@@ -222,8 +223,12 @@ class _TrialAccessGateState extends State<_TrialAccessGate> {
   Future<void> _announceDeactivation() async {
     if (_showingDeactivation || !mounted) return;
     _showingDeactivation = true;
+    final contact = await DeveloperSupportContact.load();
+    if (!mounted) return;
     final finished = await showWorkshopDeactivationNotice(
       context,
+      supportEmail: contact.email,
+      supportPhone: contact.phone,
       isStillDeactivated: () async {
         if (widget.store != null) {
           final cloudAvailable = await WorkshopRepository()

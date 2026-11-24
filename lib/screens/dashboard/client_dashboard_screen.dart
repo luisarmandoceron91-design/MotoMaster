@@ -10,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/auth/admin_auth_controller.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/access/workshop_deactivation_notice.dart';
+import '../../core/access/developer_support_contact.dart';
 import '../../core/branding/workshop_brand.dart';
 import '../../core/chat/chat_repository.dart';
 import '../../core/chat/chat_attachment_actions.dart';
@@ -3563,12 +3564,12 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       );
       if (!available && mounted) {
         _showingDeactivation = true;
+        final contact = await DeveloperSupportContact.load();
+        if (!mounted) return;
         final finished = await showWorkshopDeactivationNotice(
           context,
-          supportEmail: widget.authController.email.trim().isEmpty
-              ? 'luisarmandoceron91@gmail.com'
-              : widget.authController.email.trim(),
-          supportPhone: widget.authController.phone,
+          supportEmail: contact.email,
+          supportPhone: contact.phone,
           isStillDeactivated: () async => !(await WorkshopRepository()
               .isAvailableForClients(widget.workshop.id)),
         );

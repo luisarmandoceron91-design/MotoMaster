@@ -4007,6 +4007,8 @@ class _OwnerSettingsState extends State<_OwnerSettings> {
   late final TextEditingController _phone;
   late final TextEditingController _title;
   late final TextEditingController _contact;
+  late final TextEditingController _deactivationEmail;
+  late final TextEditingController _deactivationPhone;
   late final TextEditingController _newUsername;
   final _currentPassword = TextEditingController();
   final _newPassword = TextEditingController();
@@ -4034,6 +4036,11 @@ class _OwnerSettingsState extends State<_OwnerSettings> {
     _contact = TextEditingController(
       text: auth.publicContact.isEmpty ? auth.email : auth.publicContact,
     );
+    _deactivationEmail = TextEditingController(
+      text: 'luisarmandoceron91@gmail.com',
+    );
+    _deactivationPhone = TextEditingController(text: '3207539325');
+    _loadDeactivationContact();
     _newUsername = TextEditingController(text: auth.username);
     _credit = auth.documentCreditEnabled;
     _twoFactor = auth.ownerTwoFactorEnabled;
@@ -4056,6 +4063,8 @@ class _OwnerSettingsState extends State<_OwnerSettings> {
       _phone,
       _title,
       _contact,
+      _deactivationEmail,
+      _deactivationPhone,
       _newUsername,
       _currentPassword,
       _newPassword,
@@ -4245,6 +4254,28 @@ class _OwnerSettingsState extends State<_OwnerSettings> {
             _field(_email, 'Correo de recuperación', Icons.email_outlined),
             const SizedBox(height: 12),
             _field(_phone, 'Celular de recuperación', Icons.phone_outlined),
+            const SizedBox(height: 18),
+            const Divider(color: _border),
+            const SizedBox(height: 8),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Contacto mostrado al desactivar talleres',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+            const SizedBox(height: 10),
+            _field(
+              _deactivationEmail,
+              'Correo de soporte',
+              Icons.support_agent_outlined,
+            ),
+            const SizedBox(height: 12),
+            _field(
+              _deactivationPhone,
+              'Teléfono de soporte',
+              Icons.phone_in_talk_outlined,
+            ),
             const SizedBox(height: 10),
             const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -4507,7 +4538,7 @@ class _OwnerSettingsState extends State<_OwnerSettings> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
-    final error = await widget.authController.saveOwnerPresentation(
+    var error = await widget.authController.saveOwnerPresentation(
       fullName: _name.text,
       document: _document.text,
       email: _email.text,
@@ -4519,9 +4550,27 @@ class _OwnerSettingsState extends State<_OwnerSettings> {
       documentFormats: _formats.toList(),
       avatarBase64: _avatar == null ? null : base64Encode(_avatar!),
     );
+    if (error == null) {
+      try {
+        await OwnerControlService().updateDeveloperSupportContact(
+          email: _deactivationEmail.text,
+          phone: _deactivationPhone.text,
+        );
+      } catch (_) {
+        error =
+            'El perfil se guardó, pero no fue posible actualizar el contacto de talleres desactivados.';
+      }
+    }
     if (!mounted) return;
     setState(() => _saving = false);
     _toast(error ?? 'Configuración guardada correctamente.');
+  }
+
+  Future<void> _loadDeactivationContact() async {
+    final contact = await OwnerControlService().getDeveloperSupportContact();
+    if (!mounted) return;
+    _deactivationEmail.text = contact.email;
+    _deactivationPhone.text = contact.phone;
   }
 
   Future<void> _changeCredentials() async {

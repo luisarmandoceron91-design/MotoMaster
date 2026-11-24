@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../networking/api_client.dart';
+import '../access/developer_support_contact.dart';
 
 class OwnerWorkshopRecord {
   const OwnerWorkshopRecord({
@@ -85,6 +86,25 @@ class OwnerControlService {
   final SupabaseClient _client;
 
   bool get hasCloudSession => _client.auth.currentUser != null;
+
+  Future<DeveloperSupportContact> getDeveloperSupportContact() =>
+      DeveloperSupportContact.load();
+
+  Future<void> updateDeveloperSupportContact({
+    required String email,
+    required String phone,
+  }) async {
+    if (!hasCloudSession) {
+      throw StateError('No existe una sesión propietaria en la nube.');
+    }
+    await _client.rpc(
+      'owner_update_developer_support_contact',
+      params: {
+        'new_email': email.trim().toLowerCase(),
+        'new_phone': phone.trim(),
+      },
+    );
+  }
 
   Future<List<OwnerWorkshopRecord>> listWorkshops() async {
     if (!hasCloudSession) return const [];
