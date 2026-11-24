@@ -8,6 +8,9 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/admin_auth_controller.dart';
+import '../../core/auth/admin_oauth_intent_store.dart';
+import '../../core/auth/auth_service.dart';
+import '../../core/auth/google_oauth_intent_store.dart';
 import '../../core/auth/local_workshop_admin_store.dart';
 import '../../core/branding/workshop_brand.dart';
 import '../../core/commerce/commerce_models.dart';
@@ -203,6 +206,36 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
 
   void _directoryChanged() {
     if (mounted) _loadCloudData();
+  }
+
+  /// El antiguo panel local se conserva sólo para consultar datos guardados en
+  /// el dispositivo. Al usar Actualizar, la misma pantalla conecta la cuenta
+  /// propietaria real mediante Google en vez de dejar botones sin efecto.
+  Future<void> _refreshControlCenter() async {
+    if (!_ownerService.hasCloudSession) {
+      try {
+        await persistGoogleIntent(GoogleAccountIntent.administrator.name);
+        await AdminOAuthIntentStore().markPending(
+          GoogleAccountIntent.administrator,
+        );
+        final started = await AuthService().signInWithGoogle(
+          intent: GoogleAccountIntent.administrator.name,
+        );
+        if (!started && mounted) {
+          _toast(
+            'No fue posible abrir Google para conectar el Centro de control.',
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          _toast(
+            'No fue posible conectar con Google. Revisa la conexión e inténtalo nuevamente.',
+          );
+        }
+      }
+      return;
+    }
+    await _loadCloudData(showFeedback: true);
   }
 
   Future<void> _loadCloudData({
@@ -412,8 +445,13 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       }
     } catch (error) {
       await _loadLocalTrialRequests();
-      if (mounted && !silent) {
-        _toast('No fue posible validar la sesión propietaria en la nube.');
+      if (mounted) {
+        setState(() => _usingCloudData = false);
+        if (!silent || showFeedback) {
+          _toast(
+            'Esta cuenta no tiene permisos de propietario en la nube. Pulsa Actualizar e ingresa con Google usando luisarmandoceron91@gmail.com.',
+          );
+        }
       }
     } finally {
       _loadingCloudData = false;
@@ -686,7 +724,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                             tooltip: 'Actualizar datos desde la nube',
                             onPressed: _loadingCloudData
                                 ? null
-                                : () => _loadCloudData(showFeedback: true),
+                                : _refreshControlCenter,
                             icon: const Icon(Icons.refresh_rounded),
                           ),
                           IconButton(
@@ -1089,9 +1127,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               : 'Datos reales disponibles en este dispositivo. Conecta la cuenta propietaria para administrar toda la plataforma.',
           IconButton(
             tooltip: 'Actualizar datos',
-            onPressed: _loadingCloudData
-                ? null
-                : () => _loadCloudData(showFeedback: true),
+            onPressed: _loadingCloudData ? null : _refreshControlCenter,
             icon: const Icon(Icons.refresh_rounded),
           ),
         ),
