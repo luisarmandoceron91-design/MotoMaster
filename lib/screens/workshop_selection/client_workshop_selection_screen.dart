@@ -339,6 +339,12 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
     final suggestions = _search.text.trim().isEmpty
         ? const <Workshop>[]
         : shown.take(5).toList();
+    // El listado se dibuja debajo del campo. Su altura debe hacer parte del
+    // Stack; de lo contrario puede verse, pero quedar fuera del área que
+    // Flutter acepta para toques y clics.
+    final suggestionsHeight = _showSuggestions && suggestions.isNotEmpty
+        ? suggestions.length * 68.0 + 12
+        : 0.0;
     // The quick-access list is useful only before searching. Once the client
     // provides a location or text query, show exclusively the matching public
     // directory results; a saved workshop from another city must not appear.
@@ -370,43 +376,44 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
           style: TextStyle(color: Color(0xFFD1D2D4), fontSize: 17),
         ),
         const SizedBox(height: 26),
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            TextField(
-              controller: _search,
-              decoration: InputDecoration(
-                hintText: 'Buscar por nombre, departamento, municipio o barrio',
-                prefixIcon: const Icon(Icons.search_rounded, size: 29),
-                suffixIcon: _search.text.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Limpiar búsqueda',
-                        onPressed: _search.clear,
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                filled: true,
-                fillColor: const Color(0xF2222428),
-                contentPadding: const EdgeInsets.symmetric(vertical: 20),
-                border: _inputBorder(),
-                enabledBorder: _inputBorder(),
-                focusedBorder: _inputBorder(_orange),
-              ),
-            ),
-            if (_showSuggestions && suggestions.isNotEmpty)
-              Positioned(
-                top: 64,
-                left: 0,
-                right: 0,
-                child: _WorkshopSuggestions(
-                  workshops: suggestions,
-                  onSelected: _selectSuggestion,
+        SizedBox(
+          height: 64 + suggestionsHeight,
+          child: Stack(
+            children: [
+              TextField(
+                controller: _search,
+                decoration: InputDecoration(
+                  hintText:
+                      'Buscar por nombre, departamento, municipio o barrio',
+                  prefixIcon: const Icon(Icons.search_rounded, size: 29),
+                  suffixIcon: _search.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Limpiar búsqueda',
+                          onPressed: _search.clear,
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                  filled: true,
+                  fillColor: const Color(0xF2222428),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 20),
+                  border: _inputBorder(),
+                  enabledBorder: _inputBorder(),
+                  focusedBorder: _inputBorder(_orange),
                 ),
               ),
-          ],
+              if (_showSuggestions && suggestions.isNotEmpty)
+                Positioned(
+                  top: 64,
+                  left: 0,
+                  right: 0,
+                  child: _WorkshopSuggestions(
+                    workshops: suggestions,
+                    onSelected: _selectSuggestion,
+                  ),
+                ),
+            ],
+          ),
         ),
-        if (_showSuggestions && suggestions.isNotEmpty)
-          SizedBox(height: suggestions.length * 68.0 + 12),
         const SizedBox(height: 16),
         LayoutBuilder(
           builder: (context, constraints) {
