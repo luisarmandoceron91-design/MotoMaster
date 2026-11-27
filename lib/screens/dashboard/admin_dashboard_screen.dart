@@ -4595,6 +4595,121 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
     }).toList();
   }
 
+  /// Muestra resultados accionables mientras se escribe. Así no es necesario
+  /// buscar otra vez la tarjeta dentro del catálogo para abrir un repuesto.
+  Widget _productSearchResults() {
+    final query = _query.trim();
+    if (query.isEmpty || _loading) return const SizedBox.shrink();
+
+    final matches = _filteredProducts.take(6).toList();
+    if (matches.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF202328),
+        border: Border.all(
+          color: widget.brand.accentColor.withValues(alpha: .55),
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(14, 11, 14, 5),
+            child: Text(
+              'Resultados: toca un repuesto para abrir su ficha',
+              style: TextStyle(
+                color: Color(0xFFBFC2C7),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          for (var index = 0; index < matches.length; index++) ...[
+            InkWell(
+              borderRadius: BorderRadius.vertical(
+                top: index == 0 ? const Radius.circular(12) : Radius.zero,
+                bottom: index == matches.length - 1
+                    ? const Radius.circular(12)
+                    : Radius.zero,
+              ),
+              onTap: () => _openProductFromSearch(matches[index]),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 11,
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 17,
+                      backgroundColor: widget.brand.accentColor.withValues(
+                        alpha: .16,
+                      ),
+                      child: Icon(
+                        _catalogIcon(matches[index].category),
+                        color: widget.brand.accentColor,
+                        size: 19,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            matches[index].name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            [
+                              if (matches[index].brand.isNotEmpty)
+                                matches[index].brand,
+                              if (matches[index].sku.isNotEmpty)
+                                'Ref. ${matches[index].sku}',
+                              '${matches[index].stock} disponibles',
+                            ].join(' · '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFFBFC2C7),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: widget.brand.accentColor,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (index < matches.length - 1)
+              const Divider(height: 1, color: Color(0xFF383C42)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _openProductFromSearch(CommerceProduct product) {
+    _searchController.value = TextEditingValue(
+      text: product.name,
+      selection: TextSelection.collapsed(offset: product.name.length),
+    );
+    setState(() => _query = product.name);
+    _addProduct(product);
+  }
+
   @override
   Widget build(BuildContext context) => widget.catalogOnly
       ? _partsCatalog()
@@ -4831,6 +4946,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
                   );
           },
         ),
+        _productSearchResults(),
         const SizedBox(height: 14),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -5145,6 +5261,7 @@ class _WorkshopCommercePanelState extends State<_WorkshopCommercePanel> {
         'El lector de códigos USB/Bluetooth escribe el código aquí y confirma con Enter.',
         style: TextStyle(color: Color(0xFF9399A1), fontSize: 11),
       ),
+      _productSearchResults(),
       const SizedBox(height: 16),
       if (_filteredProducts.isEmpty)
         _InventoryEmptyState(

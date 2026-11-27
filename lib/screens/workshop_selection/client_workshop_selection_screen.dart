@@ -154,7 +154,6 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
       department: _department,
       municipality: _municipalitySearch.text,
       query: _search.text,
-      hiddenIds: _hiddenIds,
     );
   }
 
@@ -367,7 +366,7 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'Selecciona el taller donde deseas gestionar tu moto.',
+          'Busca por nombre del taller, municipio, departamento, barrio o dirección y toca un resultado para entrar.',
           style: TextStyle(color: Color(0xFFD1D2D4), fontSize: 17),
         ),
         const SizedBox(height: 26),
@@ -586,15 +585,10 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
   }
 
   void _selectSuggestion(Workshop workshop) {
-    _search.value = TextEditingValue(
-      text: workshop.name,
-      selection: TextSelection.collapsed(offset: workshop.name.length),
-    );
-    _municipalitySearch.text = workshop.municipality;
     setState(() {
-      _department = workshop.department;
       _showSuggestions = false;
     });
+    _open(workshop);
   }
 
   Future<void> _pick({
@@ -650,6 +644,10 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
       if (!_historyIds.contains(workshop.id)) {
         _historyIds = [workshop.id, ..._historyIds];
       }
+      // Si antes se quitó de la lista personal, al buscarlo y entrar vuelve a
+      // aparecer únicamente en "Tus talleres". Nunca se elimina del
+      // directorio público.
+      _hiddenIds = _hiddenIds.where((id) => id != workshop.id).toList();
       await widget.tenantContext.setTenant(
         Tenant(tenantId: workshop.id, name: workshop.name),
       );
@@ -695,14 +693,12 @@ class _ScreenState extends State<ClientWorkshopSelectionScreen> {
       _hiddenIds = {..._hiddenIds, workshop.id}.toList();
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${workshop.name} se quitó de Tus talleres.')),
+      SnackBar(
+        content: Text(
+          '${workshop.name} se quitó de Tus talleres. Puedes buscarlo y entrar nuevamente cuando quieras.',
+        ),
+      ),
     );
-    try {
-      await _repository.leaveAsClient(workshop.id);
-    } catch (_) {
-      // The local choice is immediate; the next connected refresh retries the
-      // remote state without putting the workshop back on screen.
-    }
   }
 }
 
