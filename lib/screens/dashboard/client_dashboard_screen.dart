@@ -19,6 +19,7 @@ import '../../core/client/client_profile.dart';
 import '../../core/client/client_profile_repository.dart';
 import '../../core/client/appointment_calendar.dart';
 import '../../core/client/client_service_store.dart';
+import '../../core/client/service_report_pdf_service.dart';
 import '../../core/client/local_client_profile_store.dart';
 import '../../core/commerce/commerce_models.dart';
 import '../../core/commerce/product_gallery.dart';
@@ -2679,11 +2680,13 @@ class _AppointmentCard extends StatelessWidget {
     required this.item,
     required this.accent,
     required this.onRate,
+    required this.onDetails,
     this.onCancel,
   });
   final ClientAppointment item;
   final Color accent;
   final VoidCallback onRate;
+  final VoidCallback onDetails;
   final VoidCallback? onCancel;
 
   @override
@@ -2768,6 +2771,12 @@ class _AppointmentCard extends StatelessWidget {
                 onPressed: onRate,
                 icon: const Icon(Icons.star_outline_rounded, size: 18),
                 label: const Text('Calificar'),
+              )
+            else
+              TextButton.icon(
+                onPressed: onDetails,
+                icon: const Icon(Icons.article_outlined, size: 18),
+                label: const Text('Ver detalles'),
               ),
           ],
         ),
@@ -4151,6 +4160,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
             item: _nextAppointment!,
             accent: widget.brand.accentColor,
             onRate: () => _showFeedback(_nextAppointment),
+            onDetails: () => _showServiceDetails(_nextAppointment!),
             onCancel: _nextAppointment!.canBeCancelled()
                 ? () => _cancelAppointment(_nextAppointment!)
                 : null,
@@ -4208,7 +4218,9 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
                   children: [
                     const Expanded(child: _Label('SERVICIO ACTUAL')),
                     TextButton(
-                      onPressed: () {},
+                      onPressed: _nextAppointment == null
+                          ? null
+                          : () => _showServiceDetails(_nextAppointment!),
                       child: const Text('Ver detalle'),
                     ),
                   ],
@@ -4231,6 +4243,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
                     item: _nextAppointment!,
                     accent: widget.brand.accentColor,
                     onRate: () => _showFeedback(_nextAppointment),
+                    onDetails: () => _showServiceDetails(_nextAppointment!),
                     onCancel: _nextAppointment!.canBeCancelled()
                         ? () => _cancelAppointment(_nextAppointment!)
                         : null,
@@ -4258,6 +4271,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
                       item: item,
                       accent: widget.brand.accentColor,
                       onRate: () => _showFeedback(item),
+                      onDetails: () => _showServiceDetails(item),
                       onCancel: item.canBeCancelled()
                           ? () => _cancelAppointment(item)
                           : null,
@@ -4604,6 +4618,246 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
     );
   }
 
+  String _reportMechanic(ClientAppointment appointment) {
+    final reportMechanic = appointment.serviceReport.mechanicName.trim();
+    if (reportMechanic.isNotEmpty) return reportMechanic;
+    if (appointment.mechanicName.trim().isNotEmpty) return appointment.mechanicName;
+    if (appointment.requestedMechanicName.trim().isNotEmpty) {
+      return appointment.requestedMechanicName;
+    }
+    return 'Por asignar';
+  }
+
+  Future<void> _showServiceDetails(ClientAppointment appointment) async {
+    final report = appointment.serviceReport;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF191B1F),
+      builder: (sheetContext) => SafeArea(
+        child: DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: .83,
+          minChildSize: .5,
+          maxChildSize: .95,
+          builder: (context, scrollController) => ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+            children: [
+              const _Handle(),
+              const SizedBox(height: 8),
+              const Text(
+                'Detalle del servicio',
+                style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                '${appointment.serviceType} · ${appointment.motorcycleName}',
+                style: const TextStyle(color: Color(0xFFBAC0C7)),
+              ),
+              const SizedBox(height: 16),
+              _serviceDetailPanel(appointment, report),
+              const SizedBox(height: 18),
+              if (!report.published)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF242A30),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text(
+                    'El taller todavía no ha publicado la orden detallada. Aquí aparecerán los repuestos, la mano de obra y el total cuando esté lista.',
+                    style: TextStyle(color: Color(0xFFCAD0D6)),
+                  ),
+                )
+              else ...[
+                const Text(
+                  'Repuestos instalados',
+                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                _serviceLinesTable(
+                  headers: const ['Repuesto', 'Cant.', 'Subtotal'],
+                  rows: report.parts
+                      .map(
+                        (part) => [
+                          '${part.name}${part.brand.isEmpty ? '' : '\n${part.brand}'}',
+                          '${part.quantity}',
+                          commerceMoney(part.subtotalCents),
+                        ],
+                      )
+                      .toList(),
+                ),
+                _serviceTotal('Subtotal repuestos', report.partsSubtotalCents),
+                const SizedBox(height: 18),
+                const Text(
+                  'Mano de obra',
+                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                _serviceLinesTable(
+                  headers: const ['Trabajo realizado', 'Precio'],
+                  rows: report.labor
+                      .map((labor) => [labor.description, commerceMoney(labor.priceCents)])
+                      .toList(),
+                ),
+                _serviceTotal('Subtotal mano de obra', report.laborSubtotalCents),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: widget.brand.accentColor.withValues(alpha: .13),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: widget.brand.accentColor),
+                  ),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'TOTAL A PAGAR',
+                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+                        ),
+                      ),
+                      Text(
+                        commerceMoney(report.totalCents),
+                        style: TextStyle(
+                          color: widget.brand.accentColor,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () async {
+                    final bytes = await ServiceReportPdfService().build(
+                      appointment: appointment,
+                      workshopName: widget.workshop.name,
+                    );
+                    await Printing.sharePdf(
+                      bytes: bytes,
+                      filename: 'orden_servicio_${appointment.id}.pdf',
+                    );
+                  },
+                  icon: const Icon(Icons.download_outlined),
+                  label: const Text('Descargar orden de servicio'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _serviceDetailPanel(
+    ClientAppointment appointment,
+    ClientServiceReport report,
+  ) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: const Color(0xFF22272D),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: const Color(0xFF3A4048)),
+    ),
+    child: Column(
+      children: [
+        _serviceDetailRow(
+          Icons.event_available_outlined,
+          'Cita ${appointment.status.toLowerCase()}',
+          '${_date(appointment.date)} · ${_formatTime12h(appointment.time)}',
+        ),
+        _serviceDetailRow(
+          Icons.engineering_outlined,
+          'Mecánico',
+          _reportMechanic(appointment),
+        ),
+        if (report.mileage.trim().isNotEmpty)
+          _serviceDetailRow(Icons.speed_outlined, 'Kilometraje de ingreso', report.mileage),
+        if (report.diagnosis.trim().isNotEmpty)
+          _serviceDetailRow(
+            Icons.fact_check_outlined,
+            'Diagnóstico, daños o novedades',
+            report.diagnosis,
+          ),
+      ],
+    ),
+  );
+
+  Widget _serviceDetailRow(IconData icon, String label, String value) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 7),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 19, color: widget.brand.accentColor),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFFACB2BA))),
+              const SizedBox(height: 2),
+              Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _serviceLinesTable({
+    required List<String> headers,
+    required List<List<String>> rows,
+  }) {
+    final displayRows = rows.isEmpty
+        ? [List<String>.generate(headers.length, (index) => index == 0 ? 'Sin registros' : '')]
+        : rows;
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFF3C424A)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Table(
+        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        border: const TableBorder(horizontalInside: BorderSide(color: Color(0xFF343A42))),
+        children: [
+          TableRow(
+            decoration: const BoxDecoration(color: Color(0xFF282E34)),
+            children: headers
+                .map((text) => Padding(
+                      padding: const EdgeInsets.all(9),
+                      child: Text(text, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                    ))
+                .toList(),
+          ),
+          ...displayRows.map(
+            (row) => TableRow(
+              children: row
+                  .map((text) => Padding(
+                        padding: const EdgeInsets.all(9),
+                        child: Text(text, style: const TextStyle(fontSize: 12)),
+                      ))
+                  .toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _serviceTotal(String label, int cents) => Padding(
+    padding: const EdgeInsets.only(top: 9),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+        Text(commerceMoney(cents), style: const TextStyle(fontWeight: FontWeight.w900)),
+      ],
+    ),
+  );
+
   Future<void> _cancelAppointment(ClientAppointment appointment) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -4644,6 +4898,13 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
     String? initialTime,
     ClientMotorcycle? initialMotorcycle,
   ]) async {
+    if (_appointments.any((item) => item.isOpen)) {
+      _notice(
+        'Ya tienes una cita activa. Para corregir fecha, hora, moto o servicio, cancélala primero desde Citas y solicita una nueva.',
+      );
+      setState(() => _tab = 1);
+      return;
+    }
     if (_motorcycles.isEmpty) {
       _notice('Primero agrega una moto para reservar el servicio.');
       setState(() => _tab = 2);

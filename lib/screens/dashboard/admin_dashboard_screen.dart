@@ -1778,6 +1778,119 @@ class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
     }
   }
 
+  Future<void> _editServiceReport(ClientAppointment appointment) async {
+    final report = appointment.serviceReport;
+    final mileage = TextEditingController(text: report.mileage);
+    final mechanic = TextEditingController(
+      text: report.mechanicName.isNotEmpty
+          ? report.mechanicName
+          : appointment.mechanicName,
+    );
+    final diagnosis = TextEditingController(text: report.diagnosis);
+    final parts = TextEditingController(
+      text: report.parts
+          .map((item) => '${item.name} | ${item.brand} | ${item.quantity} | ${item.unitPriceCents ~/ 100}')
+          .join('\n'),
+    );
+    final labor = TextEditingController(
+      text: report.labor
+          .map((item) => '${item.description} | ${item.priceCents ~/ 100}')
+          .join('\n'),
+    );
+    final shouldPublish = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Orden detallada del servicio'),
+        content: SizedBox(
+          width: 620,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('El cliente verá esta información y podrá descargarla.', style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: 12),
+                TextField(controller: mileage, decoration: const InputDecoration(labelText: 'Kilometraje de ingreso')),
+                TextField(controller: mechanic, decoration: const InputDecoration(labelText: 'Mecánico que atendió')),
+                TextField(controller: diagnosis, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Diagnóstico, daños o novedades', alignLabelWithHint: true)),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: parts,
+                  minLines: 3,
+                  maxLines: 7,
+                  decoration: const InputDecoration(
+                    labelText: 'Repuestos instalados',
+                    hintText: 'Nombre | Marca | Cantidad | Precio\nEj. Aceite de motor | Motul | 1 | 45000',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: labor,
+                  minLines: 2,
+                  maxLines: 6,
+                  decoration: const InputDecoration(
+                    labelText: 'Mano de obra',
+                    hintText: 'Trabajo realizado | Precio\nEj. Cambio de aceite | 20000',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.publish_outlined),
+            label: const Text('Publicar para el cliente'),
+          ),
+        ],
+      ),
+    );
+    if (shouldPublish == true) {
+      try {
+        final updated = ClientServiceReport(
+          published: true,
+          mileage: mileage.text.trim(),
+          mechanicName: mechanic.text.trim(),
+          diagnosis: diagnosis.text.trim(),
+          parts: _reportParts(parts.text),
+          labor: _reportLabor(labor.text),
+        );
+        await _store.saveServiceReport(appointment, updated);
+        await _load();
+      } on AppointmentPersistenceException {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo publicar la orden. Inténtalo de nuevo.')));
+        }
+      }
+    }
+    mileage.dispose(); mechanic.dispose(); diagnosis.dispose(); parts.dispose(); labor.dispose();
+  }
+
+  List<ClientServiceReportLine> _reportParts(String value) => value
+      .split('\n')
+      .map((line) => line.split('|').map((value) => value.trim()).toList())
+      .where((data) => data.isNotEmpty && data.first.isNotEmpty)
+      .map((data) => ClientServiceReportLine(
+            name: data.first,
+            brand: data.length > 1 ? data[1] : '',
+            quantity: data.length > 2 ? int.tryParse(data[2]) ?? 1 : 1,
+            unitPriceCents: (data.length > 3 ? int.tryParse(data[3]) ?? 0 : 0) * 100,
+          ))
+      .toList();
+
+  List<ClientServiceLaborLine> _reportLabor(String value) => value
+      .split('\n')
+      .map((line) => line.split('|').map((value) => value.trim()).toList())
+      .where((data) => data.isNotEmpty && data.first.isNotEmpty)
+      .map((data) => ClientServiceLaborLine(
+            description: data.first,
+            priceCents: (data.length > 1 ? int.tryParse(data[1]) ?? 0 : 0) * 100,
+          ))
+      .toList();
+
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
@@ -1999,17 +2112,6 @@ class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
                               icon: const Icon(Icons.check_circle_outline),
                               label: const Text('Aceptar cita'),
                             ),
-                            OutlinedButton.icon(
-                              onPressed: () async {
-                                await _store.decideAppointment(
-                                  item,
-                                  accept: false,
-                                );
-                                await _load();
-                              },
-                              icon: const Icon(Icons.cancel_outlined),
-                              label: const Text('Rechazar'),
-                            ),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -2063,6 +2165,12 @@ class _WorkshopServicePanelState extends State<_WorkshopServicePanel> {
                             mechanicName: mechanicName ?? '',
                           );
                         },
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: () => _editServiceReport(item),
+                        icon: const Icon(Icons.receipt_long_outlined),
+                        label: Text(item.serviceReport.published ? 'Editar orden publicada' : 'Crear y publicar orden detallada'),
                       ),
                     ],
                   );

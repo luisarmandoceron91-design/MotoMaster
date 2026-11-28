@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 const clientServiceStages = <String>[
-  'Cita solicitada',
+  'Cita aceptada',
   'Moto recibida',
   'En diagnóstico',
   'En reparación',
@@ -90,6 +90,7 @@ class ClientAppointment {
     this.clientName = '',
     this.clientEmail = '',
     this.clientPhone = '',
+    this.serviceReport = const ClientServiceReport(),
     this.updatedAt,
   });
 
@@ -112,6 +113,7 @@ class ClientAppointment {
   final String clientName;
   final String clientEmail;
   final String clientPhone;
+  final ClientServiceReport serviceReport;
   final DateTime? updatedAt;
 
   bool get isCancelled => status == 'Cancelada';
@@ -126,7 +128,7 @@ class ClientAppointment {
   }
 
   bool canBeCancelled([DateTime? now]) {
-    if (isCancelled || serviceStage != 'Cita solicitada') return false;
+    if (isCancelled || status == 'Completada') return false;
     return startsAt.difference(now ?? DateTime.now()) >=
         appointmentCancellationNotice;
   }
@@ -143,6 +145,7 @@ class ClientAppointment {
     String? clientName,
     String? clientEmail,
     String? clientPhone,
+    ClientServiceReport? serviceReport,
     DateTime? updatedAt,
   }) => ClientAppointment(
     id: id ?? this.id,
@@ -161,6 +164,7 @@ class ClientAppointment {
     clientName: clientName ?? this.clientName,
     clientEmail: clientEmail ?? this.clientEmail,
     clientPhone: clientPhone ?? this.clientPhone,
+      serviceReport: serviceReport ?? this.serviceReport,
     updatedAt: updatedAt ?? this.updatedAt,
   );
 
@@ -181,6 +185,7 @@ class ClientAppointment {
     'client_name': clientName,
     'client_email': clientEmail,
     'client_phone': clientPhone,
+    'service_report': serviceReport.toMap(),
     'updated_at': updatedAt?.toIso8601String(),
   };
 
@@ -211,9 +216,137 @@ class ClientAppointment {
           map['client_email']?.toString() ?? profile['email']?.toString() ?? '',
       clientPhone:
           map['client_phone']?.toString() ?? profile['phone']?.toString() ?? '',
+      serviceReport: ClientServiceReport.fromMap(
+        map['service_report'] is Map
+            ? Map<String, dynamic>.from(map['service_report'] as Map)
+            : const <String, dynamic>{},
+      ),
       updatedAt: DateTime.tryParse(map['updated_at']?.toString() ?? ''),
     );
   }
+}
+
+class ClientServiceReportLine {
+  const ClientServiceReportLine({
+    required this.name,
+    this.brand = '',
+    this.quantity = 1,
+    this.unitPriceCents = 0,
+  });
+
+  final String name;
+  final String brand;
+  final int quantity;
+  final int unitPriceCents;
+
+  int get subtotalCents => quantity * unitPriceCents;
+
+  Map<String, dynamic> toMap() => {
+    'name': name,
+    'brand': brand,
+    'quantity': quantity,
+    'unit_price_cents': unitPriceCents,
+  };
+
+  factory ClientServiceReportLine.fromMap(Map<String, dynamic> map) =>
+      ClientServiceReportLine(
+        name: map['name']?.toString() ?? '',
+        brand: map['brand']?.toString() ?? '',
+        quantity: int.tryParse(map['quantity']?.toString() ?? '') ?? 1,
+        unitPriceCents:
+            int.tryParse(map['unit_price_cents']?.toString() ?? '') ?? 0,
+      );
+}
+
+class ClientServiceLaborLine {
+  const ClientServiceLaborLine({required this.description, this.priceCents = 0});
+
+  final String description;
+  final int priceCents;
+
+  Map<String, dynamic> toMap() => {
+    'description': description,
+    'price_cents': priceCents,
+  };
+
+  factory ClientServiceLaborLine.fromMap(Map<String, dynamic> map) =>
+      ClientServiceLaborLine(
+        description: map['description']?.toString() ?? '',
+        priceCents: int.tryParse(map['price_cents']?.toString() ?? '') ?? 0,
+      );
+}
+
+class ClientServiceReport {
+  const ClientServiceReport({
+    this.published = false,
+    this.mileage = '',
+    this.diagnosis = '',
+    this.mechanicName = '',
+    this.parts = const [],
+    this.labor = const [],
+    this.updatedAt,
+  });
+
+  final bool published;
+  final String mileage;
+  final String diagnosis;
+  final String mechanicName;
+  final List<ClientServiceReportLine> parts;
+  final List<ClientServiceLaborLine> labor;
+  final DateTime? updatedAt;
+
+  int get partsSubtotalCents =>
+      parts.fold(0, (sum, item) => sum + item.subtotalCents);
+  int get laborSubtotalCents =>
+      labor.fold(0, (sum, item) => sum + item.priceCents);
+  int get totalCents => partsSubtotalCents + laborSubtotalCents;
+
+  ClientServiceReport copyWith({
+    bool? published,
+    String? mileage,
+    String? diagnosis,
+    String? mechanicName,
+    List<ClientServiceReportLine>? parts,
+    List<ClientServiceLaborLine>? labor,
+    DateTime? updatedAt,
+  }) => ClientServiceReport(
+    published: published ?? this.published,
+    mileage: mileage ?? this.mileage,
+    diagnosis: diagnosis ?? this.diagnosis,
+    mechanicName: mechanicName ?? this.mechanicName,
+    parts: parts ?? this.parts,
+    labor: labor ?? this.labor,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+
+  Map<String, dynamic> toMap() => {
+    'published': published,
+    'mileage': mileage,
+    'diagnosis': diagnosis,
+    'mechanic_name': mechanicName,
+    'parts': parts.map((item) => item.toMap()).toList(),
+    'labor': labor.map((item) => item.toMap()).toList(),
+    'updated_at': updatedAt?.toIso8601String(),
+  };
+
+  factory ClientServiceReport.fromMap(Map<String, dynamic> map) =>
+      ClientServiceReport(
+        published: map['published'] == true,
+        mileage: map['mileage']?.toString() ?? '',
+        diagnosis: map['diagnosis']?.toString() ?? '',
+        mechanicName: map['mechanic_name']?.toString() ?? '',
+        parts: (map['parts'] as List? ?? const [])
+            .whereType<Map>()
+            .map((item) => ClientServiceReportLine.fromMap(Map<String, dynamic>.from(item)))
+            .where((item) => item.name.trim().isNotEmpty)
+            .toList(),
+        labor: (map['labor'] as List? ?? const [])
+            .whereType<Map>()
+            .map((item) => ClientServiceLaborLine.fromMap(Map<String, dynamic>.from(item)))
+            .where((item) => item.description.trim().isNotEmpty)
+            .toList(),
+        updatedAt: DateTime.tryParse(map['updated_at']?.toString() ?? ''),
+      );
 }
 
 class ClientServiceStore {
@@ -619,8 +752,8 @@ class ClientServiceStore {
       serviceStage: stage,
       status: stage == 'Entregada'
           ? 'Completada'
-          : stage == 'Cita solicitada'
-          ? 'Solicitada'
+          : stage == 'Cita aceptada'
+          ? 'Confirmada'
           : 'En proceso',
       mechanicName: mechanicName,
       updatedAt: DateTime.now(),
@@ -635,8 +768,8 @@ class ClientServiceStore {
               'mechanic_name': updated.mechanicName,
               'status': stage == 'Entregada'
                   ? 'completed'
-                  : stage == 'Cita solicitada'
-                  ? 'requested'
+                  : stage == 'Cita aceptada'
+                  ? 'confirmed'
                   : 'in_progress',
             })
             .eq('id', updated.id);
@@ -703,17 +836,59 @@ class ClientServiceStore {
     revision.value++;
   }
 
-  /// El administrador confirma o rechaza la solicitud. La actualización se
-  /// realiza en Supabase y el trigger de notificaciones avisa al cliente.
+  /// Guarda la orden detallada que el taller publica para que el cliente vea
+  /// repuestos, mano de obra, mecánico y total desde cualquier dispositivo.
+  Future<void> saveServiceReport(
+    ClientAppointment appointment,
+    ClientServiceReport report,
+  ) async {
+    final timestamp = DateTime.now();
+    final updatedReport = report.copyWith(updatedAt: timestamp);
+    final updated = appointment.copyWith(
+      serviceReport: updatedReport,
+      updatedAt: timestamp,
+    );
+    final cloud = _cloudClient(appointment.workshopId, null);
+    if (cloud != null && _isUuid(appointment.id)) {
+      try {
+        await cloud
+            .from('appointments')
+            .update({'service_report': updatedReport.toMap()})
+            .eq('id', appointment.id);
+      } catch (_) {
+        throw const AppointmentPersistenceException();
+      }
+    }
+    final preferences = await SharedPreferences.getInstance();
+    final global = await _listGlobalAppointments(preferences);
+    final globalIndex = global.indexWhere((item) => item.id == appointment.id);
+    if (globalIndex >= 0) global[globalIndex] = updated;
+    await _saveGlobalAppointments(preferences, global);
+    final scoped = [
+      ...await listAppointments(appointment.workshopId, appointment.clientId),
+    ];
+    final scopedIndex = scoped.indexWhere((item) => item.id == appointment.id);
+    if (scopedIndex >= 0) scoped[scopedIndex] = updated;
+    await _saveAppointments(
+      preferences,
+      appointment.workshopId,
+      appointment.clientId,
+      scoped,
+    );
+    revision.value++;
+  }
+
+  /// El administrador confirma la solicitud. La actualización se realiza en
+  /// Supabase y el trigger de notificaciones avisa al cliente.
   Future<void> decideAppointment(
     ClientAppointment appointment, {
     required bool accept,
   }) async {
-    if (appointment.status != 'Solicitada') return;
-    final stage = accept ? 'Cita solicitada' : 'Cita rechazada';
-    final status = accept ? 'confirmed' : 'cancelled';
+    if (appointment.status != 'Solicitada' || !accept) return;
+    const stage = 'Cita aceptada';
+    const status = 'confirmed';
     final updated = appointment.copyWith(
-      status: accept ? 'Confirmada' : 'Cancelada',
+      status: 'Confirmada',
       serviceStage: stage,
       updatedAt: DateTime.now(),
     );
@@ -857,6 +1032,11 @@ class ClientServiceStore {
       serviceStage: row['service_stage']?.toString() ?? 'Cita solicitada',
       mechanicName: row['mechanic_name']?.toString() ?? '',
       requestedMechanicName: row['requested_mechanic_name']?.toString() ?? '',
+      serviceReport: ClientServiceReport.fromMap(
+        row['service_report'] is Map
+            ? Map<String, dynamic>.from(row['service_report'] as Map)
+            : const <String, dynamic>{},
+      ),
       updatedAt: DateTime.tryParse(row['updated_at']?.toString() ?? ''),
     );
   }
